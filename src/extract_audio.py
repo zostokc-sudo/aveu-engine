@@ -1,9 +1,12 @@
 """Extraction audio depuis une vidéo, prête pour la transcription."""
 
+import shutil
 import subprocess
 from pathlib import Path
 
-FFMPEG = "/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg"
+_MAC_BIN = Path("/opt/homebrew/opt/ffmpeg-full/bin")  # Mac du dev ; sur un serveur Linux, on prend ffmpeg du PATH
+FFMPEG = str(_MAC_BIN / "ffmpeg") if _MAC_BIN.exists() else (shutil.which("ffmpeg") or "ffmpeg")
+FFPROBE = str(_MAC_BIN / "ffprobe") if _MAC_BIN.exists() else (shutil.which("ffprobe") or "ffprobe")
 
 
 def extract_audio(video_path: Path, out_wav: Path, sample_rate: int = 16000) -> Path:
@@ -23,7 +26,7 @@ def extract_audio(video_path: Path, out_wav: Path, sample_rate: int = 16000) -> 
 def probe_duration(video_path: Path) -> float:
     result = subprocess.run(
         [
-            "/opt/homebrew/opt/ffmpeg-full/bin/ffprobe", "-v", "error",
+            FFPROBE, "-v", "error",
             "-show_entries", "format=duration",
             "-of", "default=noprint_wrappers=1:nokey=1",
             str(video_path),
