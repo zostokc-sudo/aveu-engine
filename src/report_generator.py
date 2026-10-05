@@ -293,16 +293,37 @@ _PROMPT_SIGNAL_KEYS = [
 ]
 
 
+def _r(v):
+    return round(v, 2) if isinstance(v, float) else v
+
+
 def _compact_for_prompt(timeline: list[dict]) -> list[dict]:
+    # Valeurs arrondies, signaux nuls omis, texte borné : chaque fenêtre pèse ~3x moins de tokens.
     return [
         {
-            "start_sec": w["start_sec"], "end_sec": w["end_sec"],
-            "spoken_text": w["spoken_text"], "speech_ratio": w["speech_ratio"],
-            "avg_pause_ms": w["avg_pause_ms"],
-            "signals": {k: w["signals"][k] for k in _PROMPT_SIGNAL_KEYS if k in w["signals"]},
+            "start_sec": _r(w["start_sec"]), "end_sec": _r(w["end_sec"]),
+            "spoken_text": w["spoken_text"][:220], "speech_ratio": _r(w["speech_ratio"]),
+            "avg_pause_ms": _r(w["avg_pause_ms"]),
+            "signals": {k: _r(w["signals"][k]) for k in _PROMPT_SIGNAL_KEYS if w["signals"].get(k)},
         }
         for w in timeline
     ]
+
+
+# Plafond Groq gratuit : 8000 tokens/minute (entrée + sortie demandée). Budget en caractères
+# (~3 caractères/token en français + JSON) pour le prompt entier, avec une sortie de 3200 tokens.
+_GROQ_MAX_OUTPUT = 3200
+_GROQ_PROMPT_CHARS = 13000
+
+
+def _fit_timeline_to_budget(timeline: list[dict], system: str, intro: str) -> list[dict]:
+    n = min(len(timeline), _MAX_WINDOWS_FOR_LLM)
+    while True:
+        chosen = select_salient_windows(timeline, n)
+        size = len(system) + len(intro) + len(json.dumps(_compact_for_prompt(chosen), ensure_ascii=False))
+        if size <= _GROQ_PROMPT_CHARS or n <= 8:
+            return chosen
+        n = max(8, int(n * 0.85))
 
 
 def generate_report(
@@ -314,17 +335,15 @@ def generate_report(
     timeline = merge_timeline(segments, buckets, audio_buckets)
     if not timeline:
         raise ValueError("Aucune fenêtre exploitable (visage jamais détecté de façon fiable).")
-    timeline = select_salient_windows(timeline)
+    system = SYSTEM_PROMPT.format(context=context)
+    intro = "Voici la timeline de l'enregistrement, en JSON. Produis le rapport d'analyse comportementale.\n\n"
+    timeline = _fit_timeline_to_budget(timeline, system, intro)
 
     report = llm_parse(
-        system=SYSTEM_PROMPT.format(context=context),
-        user=(
-            "Voici la timeline complète de l'enregistrement, en JSON. "
-            "Produis le rapport d'analyse comportementale.\n\n"
-            + json.dumps(_compact_for_prompt(timeline), ensure_ascii=False)
-        ),
+        system=system,
+        user=intro + json.dumps(_compact_for_prompt(timeline), ensure_ascii=False),
         output_format=BehaviorReport,
-        max_tokens=4000,
+        max_tokens=_GROQ_MAX_OUTPUT,
     )
     for warning in quality_warnings(report, timeline):
         print(f"QUALITY WARNING: {warning}", file=sys.stderr)
