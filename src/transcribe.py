@@ -35,8 +35,16 @@ class Segment:
 def _transcribe_cpu(wav_path: Path) -> list[Segment]:
     from faster_whisper import WhisperModel
 
+    import wave
+
+    import numpy as np
+
+    # extract_audio produit déjà un WAV 16 kHz mono 16 bits : on le charge directement
+    # (évite la dépendance à PyAV, dont la version varie selon les installations).
+    with wave.open(str(wav_path), "rb") as w:
+        audio = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16).astype(np.float32) / 32768.0
     model = WhisperModel("small", device="cpu", compute_type="int8")
-    raw, _ = model.transcribe(str(wav_path), word_timestamps=True)
+    raw, _ = model.transcribe(audio, word_timestamps=True)
     return [
         Segment(
             text=seg.text.strip(), start=seg.start, end=seg.end,
