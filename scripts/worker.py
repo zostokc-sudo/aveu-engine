@@ -6,6 +6,7 @@ Variables : SUPABASE_URL, SUPABASE_SERVICE_KEY, GROQ_API_KEY."""
 import os
 import sys
 import tempfile
+import traceback
 from pathlib import Path
 
 import requests
@@ -46,6 +47,7 @@ def process(a: dict) -> None:
         patch(audit_id, status="error", error=str(exc)[:300])
     except Exception as exc:  # message court côté client, détail dans les logs Actions
         print("ERREUR", audit_id, repr(exc), file=sys.stderr)
+        traceback.print_exc()
         patch(audit_id, status="error", error="L'analyse a échoué. Réessayez avec une autre vidéo.")
     finally:
         requests.delete(f"{URL}/storage/v1/object/videos/{a['video_path']}", headers=H, timeout=30)  # on ne garde pas la vidéo
