@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aveu — Rapport d'analyse comportementale — {{ subject_name }}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,380;0,9..144,560;1,9..144,460&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy: #0f1e35;
+    --navy-light: #1b3358;
+    --gold: #b8934f;
+    --gold-dim: #d9c39a;
+    --ink: #1a1f2b;
+    --muted: #6b7280;
+    --bg: #f7f6f3;
+    --card: #ffffff;
+    --line: #e7e3da;
+    --red: #c0392b;
+    --orange: #d68910;
+    --green: #1e8449;
+    --neutral: #5b6472;
+    --font-display: "Fraunces", Georgia, serif;
+    --font-body: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif;
+    --font-mono: "IBM Plex Mono", "SF Mono", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: var(--font-body);
+    background: var(--bg); color: var(--ink); line-height: 1.55;
+  }
+  .header {
+    background: linear-gradient(135deg, var(--navy), var(--navy-light));
+    color: #fff; padding: 48px 56px;
+  }
+  .header .eyebrow { color: var(--gold-dim); font-family: var(--font-mono); font-size: 12px; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 10px; }
+  .header h1 { margin: 0 0 6px; font-family: var(--font-display); font-size: 32px; font-weight: 560; }
+  .header .meta { color: #b8c2d4; font-family: var(--font-mono); font-size: 13px; margin-top: 12px; }
+  .container { max-width: 960px; margin: 0 auto; padding: 0 56px 64px; }
+  section { margin-top: 44px; }
+  h2 {
+    font-family: var(--font-mono); font-size: 13px; letter-spacing: 1.5px; text-transform: uppercase;
+    color: var(--navy); border-bottom: 2px solid var(--gold); padding-bottom: 10px; font-weight: 500;
+  }
+  .summary-box {
+    background: var(--card); border-left: 4px solid var(--gold);
+    padding: 24px 28px; border-radius: 4px; font-size: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.06);
+  }
+
+  .gauges { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 12px; margin-top: 18px; }
+  .gauge { position: relative; background: var(--card); border: 0; border-radius: 22px; padding: 14px 8px 12px; text-align: center; box-shadow: 0 4px 16px rgba(60,50,30,.07); cursor: pointer; font: inherit; color: inherit; transition: transform .15s, box-shadow .15s; }
+  .gauge:hover, .gauge:focus-visible { transform: translateY(-3px); box-shadow: 0 8px 22px rgba(60,50,30,.14); outline: none; }
+  .gauge svg { width: 78px; height: 78px; }
+  .gauge .g-num { font-family: var(--font-mono); font-size: 20px; font-weight: 600; line-height: 1; }
+  .gauge .g-label { font-size: 13.5px; font-weight: 600; margin-top: 6px; color: #3b3528; line-height: 1.2; min-height: 32px; }
+  .gauge .g-pill { display: inline-block; margin-top: 4px; padding: 3px 10px; border-radius: 999px; font-size: 11.5px; font-weight: 600; }
+  .gauge .g-tip { position: absolute; left: 50%; bottom: calc(100% + 8px); transform: translateX(-50%); width: 220px; background: #2b261b; color: #fff; font-size: 12.5px; line-height: 1.4; padding: 10px 12px; border-radius: 12px; font-weight: 400; opacity: 0; pointer-events: none; transition: opacity .15s; z-index: 5; }
+  .gauge:hover .g-tip, .gauge:focus-visible .g-tip { opacity: 1; }
+  .g-hint { font-size: 12px; color: var(--muted); margin-top: 10px; }
+  dialog.axis-modal { border: 0; border-radius: 32px; padding: 0; max-width: 440px; width: calc(100% - 28px); max-height: calc(100vh - 28px); overflow: hidden; box-shadow: 0 24px 70px rgba(0,0,0,.3); background: #fffdf9; }
+  dialog.axis-modal::backdrop { background: rgba(30,25,15,.5); }
+  dialog.axis-modal[open] { animation: pop .22s ease-out; }
+  @keyframes pop { from { transform: scale(.94) translateY(10px); opacity: 0; } }
+  .am { max-height: calc(100vh - 28px); overflow-y: auto; padding: 0 0 22px; text-align: center; }
+  .am-top { padding: 26px 24px 20px; position: relative; }
+  .am-close { position: absolute; top: 14px; right: 14px; border: 0; background: rgba(255,255,255,.75); border-radius: 50%; width: 38px; height: 38px; font-size: 20px; cursor: pointer; }
+  .am-ring { width: 150px; height: 150px; display: block; margin: 0 auto; }
+  .am-ring .arc { transition: stroke-dasharray .9s cubic-bezier(.2,.8,.2,1); }
+  .am h3 { font-size: 28px; font-weight: 700; margin: 6px 0 2px; color: #2b261b; }
+  .am-pill { display: inline-block; padding: 7px 18px; border-radius: 999px; font-size: 15px; font-weight: 700; background: #fff; }
+  .am-brief { font-size: 17px; line-height: 1.45; margin: 16px 22px 0; color: #3b3528; }
+  .am-sec { margin: 18px 18px 0; padding: 16px 18px; border-radius: 22px; background: #f6f2e9; text-align: left; }
+  .am-sec h4 { font-size: 15px; font-weight: 700; margin: 0 0 8px; color: #2b261b; }
+  .am-sec p { font-size: 15px; line-height: 1.45; margin: 0; }
+  .am-count { font-weight: 600; font-size: 13px; color: var(--muted); margin-left: 6px; }
+  .am-learn { display: block; margin-top: 12px; text-align: center; background: #2b261b; color: #fff; border-radius: 999px; padding: 12px; font-weight: 700; font-size: 15px; text-decoration: none; }
+  .am-todo { display: grid; gap: 8px; }
+  .am-todo label { display: flex; gap: 12px; align-items: center; background: #fff; border-radius: 16px; padding: 12px 14px; font-size: 15px; line-height: 1.35; cursor: pointer; transition: opacity .2s; }
+  .am-todo input { width: 22px; height: 22px; accent-color: #1e8449; flex: none; }
+  .am-todo input:checked + span { text-decoration: line-through; opacity: .5; }
+  .am details { margin: 14px 18px 0; text-align: left; }
+  .am summary { cursor: pointer; font-size: 14px; color: var(--muted); padding: 8px 4px; }
+  .am details p { font-size: 14px; line-height: 1.5; margin: 6px 4px; }
+  .am-nav { display: flex; justify-content: space-between; gap: 10px; margin: 18px 18px 0; }
+  .am-nav button { flex: 1; border: 0; border-radius: 999px; padding: 13px; font-size: 15px; font-weight: 600; background: #efe9db; color: #3b3528; cursor: pointer; }
+  .am-nav button:hover { background: #e6dec9; }
+  .axis-grid-print { display: none; }
+  @media print { .axis-grid-print { display: block; } .g-tip { display: none; } }
+  .hero-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; align-items: start; }
+  .radar-card {
+    background: var(--card); border-radius: 8px; padding: 16px 8px 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06); text-align: center;
+  }
+  .radar-caption { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .radar-legend { display: flex; justify-content: center; gap: 18px; margin-top: 10px; font-size: 11px; color: var(--muted); }
+  .radar-legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .swatch { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+
+  .verdict-box {
+    background: linear-gradient(135deg, var(--navy), var(--navy-light)); color: #fff;
+    border-radius: 8px; padding: 20px 24px; font-size: 15.5px; line-height: 1.5;
+    box-shadow: 0 1px 3px rgba(0,0,0,.1);
+  }
+  .verdict-box .eyebrow2 { color: var(--gold-dim); font-family: var(--font-mono); font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 8px; }
+
+  .axis-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin-top: 18px; }
+  .axis-card {
+    background: var(--card); border-radius: 8px; padding: 16px 18px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06); border-top: 3px solid var(--axis-color, var(--gold));
+  }
+  .axis-card .axis-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px; }
+  .axis-card .axis-name { font-family: var(--font-display); font-size: 16px; font-weight: 560; color: var(--navy); }
+  .axis-card .axis-value { font-family: var(--font-mono); font-size: 18px; font-weight: 600; color: var(--axis-color, var(--navy)); }
+  .axis-card .axis-what { font-size: 12.5px; color: var(--muted); margin-bottom: 8px; line-height: 1.45; }
+  .axis-card .axis-why { font-size: 12.5px; color: var(--ink); margin-bottom: 10px; line-height: 1.45; }
+  .axis-card .axis-why b { color: var(--navy); font-weight: 600; }
+  .axis-card .axis-comment {
+    font-size: 13px; padding: 10px 12px; border-radius: 6px; line-height: 1.4;
+    background: var(--axis-color-soft, #f2efe6); color: var(--ink);
+    border-left: 3px solid var(--axis-color, var(--gold));
+  }
+  @media (max-width: 720px) { .axis-grid { grid-template-columns: 1fr; } }
+
+  .scores { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; }
+  .score-card {
+    background: var(--card); border-radius: 8px; padding: 16px 12px; text-align: center;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06); border-top: 3px solid var(--score-color, var(--gold));
+  }
+  .score-card .label { font-size: 10.5px; text-transform: uppercase; color: var(--muted); letter-spacing: .5px; }
+  .score-card .value { font-family: var(--font-display); font-size: 30px; font-weight: 560; margin: 6px 0; color: var(--score-color, var(--navy)); }
+  .score-card .score-hint { font-size: 9.5px; color: var(--muted); margin-top: 6px; font-style: italic; line-height: 1.3; }
+  .bar-track { height: 5px; background: #ece8de; border-radius: 3px; overflow: hidden; }
+  .bar-fill { height: 100%; background: var(--score-color, var(--gold)); border-radius: 3px; }
+
+  .moment {
+    background: var(--card); border-radius: 8px; padding: 20px 24px; margin-bottom: 14px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06); border-left: 4px solid var(--navy-light);
+  }
+  .moment .time { font-family: var(--font-mono); font-size: 12px; color: var(--muted); font-weight: 500; letter-spacing: .5px; }
+  .moment .quote { font-family: var(--font-display); font-style: italic; color: var(--navy); margin: 10px 0; font-size: 16px; }
+  .moment .signal { font-family: var(--font-mono); font-size: 12px; color: var(--gold); font-weight: 500; margin-bottom: 6px; text-transform: uppercase; letter-spacing: .3px; }
+  .moment .interpretation { font-size: 14.5px; color: var(--ink); }
+  .confidence {
+    display: inline-block; font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: .5px;
+    padding: 2px 8px; border-radius: 10px; margin-left: 8px; vertical-align: middle;
+  }
+  .confidence.high { background: #e3efe8; color: var(--green); }
+  .confidence.medium { background: #f5efe0; color: #8a6d1f; }
+  .confidence.low { background: #f2e7e3; color: var(--red); }
+  ol.reco { padding-left: 22px; }
+  ol.reco li { margin-bottom: 14px; font-size: 15px; }
+  .footer { color: var(--muted); font-size: 11.5px; margin-top: 56px; border-top: 1px solid var(--line); padding-top: 16px; }
+
+  @media (max-width: 720px) {
+    .header, .container { padding-left: 20px; padding-right: 20px; }
+    .hero-grid { grid-template-columns: 1fr; }
+    .scores { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  @media print {
+    @page { size: A4; margin: 16mm 14mm; }
+    body { background: #fff; }
+    .header { padding: 24px 0; }
+    .container { padding: 0; max-width: none; }
+    .hero-grid { grid-template-columns: 1fr; gap: 20px; }
+    .radar-card, .moment, .score-card, .summary-box { box-shadow: none; border: 1px solid var(--line); }
+    .moment, .score-card, .scores, .summary-box, section { break-inside: avoid; page-break-inside: avoid; }
+    section { margin-top: 24px; }
+  }
+</style>
+</head>
+<body>
+  <div class="header">
+    <div class="eyebrow">Aveu — analyse comportementale — confidentiel</div>
+    <h1>{{ subject_name }}</h1>
+    <div class="meta">{{ context }} · durée analysée {{ duration_min }} min · généré le {{ generated_date }}</div>
+  </div>
+
+  <div class="container">
+    <section style="margin-top:40px">
+      <h2>Résumé exécutif</h2>
+      <div class="summary-box">{{ report.executive_summary }}</div>
+    </section>
+
+    {% if radar and radar.explanations %}
+    <section>
+      <h2>En un coup d'œil</h2>
+      <div class="gauges">
+        {% for ax in radar.explanations %}
+        <button class="gauge" type="button" data-axis="{{ loop.index0 }}" aria-label="{{ ax.label }} : {{ ax.value }} sur 100. Cliquer pour le détail">
+          <span class="g-tip">{{ ax.short }}</span>
+          <svg viewBox="0 0 120 120" aria-hidden="true">
+            <circle cx="60" cy="60" r="{{ ax.gauge_r }}" fill="none" stroke="{{ ax.color_soft }}" stroke-width="13"/>
+            <circle cx="60" cy="60" r="{{ ax.gauge_r }}" fill="none" stroke="{{ ax.color }}" stroke-width="13"
+                    stroke-linecap="round" stroke-dasharray="{{ ax.gauge_dash }}" transform="rotate(-90 60 60)"/>
+            <text x="60" y="70" text-anchor="middle" font-size="34">{{ ax.icon }}</text>
+          </svg>
+          <div class="g-num" style="color:{{ ax.color }}">{{ ax.value }}</div>
+          <div class="g-label">{{ ax.label }}</div>
+          <span class="g-done" style="position:absolute;top:8px;right:12px;font-size:12px;font-weight:700;color:#1e8449"></span><span class="g-pill" style="background:{{ ax.color_soft }};color:{{ ax.color }}">{{ ax.verdict }}</span>
+        </button>
+        {% endfor %}
+      </div>
+      <div class="g-hint">Survolez un indicateur pour sa définition, cliquez pour voir comment il est calculé et sur quoi travailler.</div>
+    </section>
+    {% endif %}
+
+    {% if report.closing_verdict %}
+    <section>
+      <div class="verdict-box">
+        <div class="eyebrow2">Verdict closing</div>
+        {{ report.closing_verdict }}
+      </div>
+    </section>
+    {% endif %}
+
+    {% if radar and radar.explanations %}
+    <section class="axis-grid-print">
+      <h2>Le détail de chaque point</h2>
+      <div class="axis-grid">
+        {% for ax in radar.explanations %}
+        <div class="axis-card" style="--axis-color: {{ ax.color }}; --axis-color-soft: {{ ax.color_soft }}">
+          <div class="axis-head">
+            <span class="axis-name">{{ ax.label }}</span>
+            <span class="axis-value">{{ ax.value }}<span style="font-size:11px;color:var(--muted)">/100</span></span>
+          </div>
+          <div class="axis-what">{{ ax.what }}</div>
+          <div class="axis-why"><b>Pourquoi pour closer —</b> {{ ax.why }}</div>
+          <div class="axis-comment">{{ ax.comment }}</div>
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+
+    <section>
+      <h2>Scores clés</h2>
+      <div class="scores">
+        {% for key, label, hint, higher_better in [
+          ("engagement","Engagement", "", true),
+          ("activation","Activation", "intensité, pas un diagnostic — voir le détail par moment", true),
+          ("openness","Ouverture", "", true),
+          ("buying_signal","Signal d'achat", "", true),
+          ("deal_risk","Risque", "", false)
+        ] %}
+        {% set val = report.overall_scores[key] %}
+        {% set color = (val | score_color(higher_better, key == "activation")) %}
+        <div class="score-card" style="--score-color: {{ color }}">
+          <div class="label">{{ label }}</div>
+          <div class="value">{{ val }}</div>
+          <div class="bar-track"><div class="bar-fill" style="width:{{ val }}%"></div></div>
+          {% if hint %}<div class="score-hint">{{ hint }}</div>{% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section>
+      <h2>Moments clés</h2>
+      {% for m in report.key_moments %}
+      <div class="moment">
+        <div class="time">{{ "%d:%02d"|format(m.start_sec // 60, m.start_sec % 60) }} – {{ "%d:%02d"|format(m.end_sec // 60, m.end_sec % 60) }}
+          <span class="confidence {{ m.confidence }}">{{ m.confidence }}</span>
+        </div>
+        <div class="quote">« {{ m.quote }} »</div>
+        <div class="signal">{{ m.behavioral_signal }}</div>
+        <div class="interpretation">{{ m.interpretation }}</div>
+      </div>
+      {% endfor %}
+    </section>
+
+    <section>
+      <h2>Plan d'action pour closer</h2>
+      <ol class="reco">
+        {% for r in report.coaching_recommendations %}
+        <li>{{ r }}</li>
+        {% endfor %}
+      </ol>
+    </section>
+
+    <div class="footer">
+      Rapport généré par analyse multimodale (vision par ordinateur + traitement du langage). Les scores et interprétations sont probabilistes et doivent être combinés au jugement humain — ils ne constituent pas une preuve comportementale absolue.
+    </div>
+  </div>
+
+{% if radar and radar.explanations %}
+<dialog class="axis-modal" id="axis-modal"><div class="am" id="axis-body"></div></dialog>
+<script>
+(function () {
+  var AX = {{ radar.explanations | tojson }};
+  var CIRC = 2 * Math.PI * 46;
+  var dlg = document.getElementById("axis-modal"), body = document.getElementById("axis-body");
+  function esc(s) { var d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
+  var KEY = "aveu.todo." + location.pathname;
+  function getDone(i, j) { try { return localStorage.getItem(KEY + "." + i + "." + j) === "1"; } catch (e) { return false; } }
+  function setDone(i, j, v) { try { localStorage.setItem(KEY + "." + i + "." + j, v ? "1" : "0"); } catch (e) {} }
+  function refreshAll() {
+    document.querySelectorAll(".gauge").forEach(function (g, i) {
+      var n = AX[i].work_short.length, d = 0; for (var j = 0; j < n; j++) if (getDone(i, j)) d++;
+      var m = g.querySelector(".g-done"); if (m) m.textContent = d === n ? "✅" : d ? d + "/" + n : "";
+    });
+  }
+  function show(i) {
+    var n = AX.length; i = (i + n) % n;
+    var a = AX[i];
+    body.innerHTML =
+      '<div class="am-top" style="background:' + a.color_soft + '">' +
+        '<button class="am-close" aria-label="Fermer">×</button>' +
+        '<svg class="am-ring" viewBox="0 0 120 120" aria-hidden="true">' +
+          '<circle cx="60" cy="60" r="46" fill="none" stroke="#fff" stroke-opacity=".7" stroke-width="13"/>' +
+          '<circle class="arc" cx="60" cy="60" r="46" fill="none" stroke="' + a.color + '" stroke-width="13" stroke-linecap="round" stroke-dasharray="0 ' + CIRC + '" transform="rotate(-90 60 60)"/>' +
+          '<text x="60" y="52" text-anchor="middle" font-size="26">' + a.icon + '</text>' +
+          '<text x="60" y="82" text-anchor="middle" font-size="28" font-weight="700" fill="' + a.color + '">' + a.value + '</text>' +
+        '</svg>' +
+        '<h3>' + esc(a.label) + '</h3>' +
+        '<span class="am-pill" style="color:' + a.color + '">' + esc(a.verdict) + '</span>' +
+      '</div>' +
+      '<p class="am-brief">' + esc(a.short) + '</p>' +
+      '<div class="am-sec"><h4>🧮 Comment c\'est calculé</h4><p>' + esc(a.how_short) + '</p></div>' +
+      '<div class="am-sec"><h4>✅ À travailler <span class="am-count" id="am-count"></span></h4><div class="am-todo">' +
+        a.work_short.map(function (w, j) { return '<label><input type="checkbox" data-j="' + j + '"' + (getDone(i, j) ? ' checked' : '') + '><span>' + esc(w) + '</span></label>'; }).join("") +
+      '</div><a class="am-learn" href="https://aveu.surge.sh/formation.html#' + a.lesson + '" target="_blank" rel="noopener">📚 Comprendre en 2 min →</a></div>' +
+      '<details><summary>En savoir plus</summary><p><b>Ce que ça mesure.</b> ' + esc(a.what) + '</p><p><b>Pour closer.</b> ' + esc(a.why) + '</p><p><b>Calcul détaillé.</b> ' + esc(a.how) + '</p></details>' +
+      '<div class="am-nav"><button data-d="-1">← Précédent</button><button data-d="1">Suivant →</button></div>';
+    body.querySelector(".am-close").onclick = function () { dlg.close(); };
+    var cnt = body.querySelector("#am-count"), boxes = body.querySelectorAll(".am-todo input");
+    function upd() { var d = body.querySelectorAll(".am-todo input:checked").length; cnt.textContent = d === boxes.length ? "🎉 Fait !" : d + "/" + boxes.length; cnt.style.color = d === boxes.length ? "#1e8449" : ""; }
+    boxes.forEach(function (c) { c.onchange = function () { setDone(i, +c.dataset.j, c.checked); upd(); refreshAll(); }; });
+    upd();
+    body.querySelectorAll(".am-nav button").forEach(function (b) { b.onclick = function () { show(i + +b.dataset.d); }; });
+    body.scrollTop = 0;
+    requestAnimationFrame(function () { requestAnimationFrame(function () {
+      body.querySelector(".arc").setAttribute("stroke-dasharray", (CIRC * a.value / 100).toFixed(1) + " " + CIRC.toFixed(1));
+    }); });
+  }
+  refreshAll();
+  document.querySelectorAll(".gauge").forEach(function (b) {
+    b.addEventListener("click", function () { show(+b.dataset.axis); if (!dlg.open) dlg.showModal(); });
+  });
+  dlg.addEventListener("click", function (e) { if (e.target === dlg) dlg.close(); });
+})();
+</script>
+{% endif %}
+</body>
+</html>
