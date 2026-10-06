@@ -15,6 +15,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Modèles Groq disponibles
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        run: curl -s https://api.groq.com/openai/v1/models -H "Authorization: Bearer $GROQ_API_KEY" | python3 -c "import sys,json;print(sorted(m['id'] for m in json.load(sys.stdin)['data']))"
+
       # Si rien n'est en attente, on s'arrête en quelques secondes (pas de minutes gaspillées).
       - name: Audit en attente ?
         id: check
