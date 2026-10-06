@@ -58,7 +58,8 @@ def release_stuck() -> None:
     from datetime import datetime, timedelta, timezone
     limit = (datetime.now(timezone.utc) - timedelta(minutes=90)).isoformat()
     r = requests.patch(
-        f"{URL}/rest/v1/audits?status=eq.running&created_at=lt.{limit}",
+        f"{URL}/rest/v1/audits",
+        params={"status": "eq.running", "created_at": f"lt.{limit}"},  # params : le '+' du fuseau est encodé correctement
         headers={**H, "Content-Type": "application/json"},
         json={"status": "error", "error": "L'analyse a été interrompue. Renvoyez votre vidéo."}, timeout=30,
     )
@@ -66,7 +67,10 @@ def release_stuck() -> None:
 
 
 def main() -> None:
-    release_stuck()
+    try:
+        release_stuck()
+    except Exception as exc:  # jamais bloquer le traitement pour un nettoyage
+        print("release_stuck a échoué :", repr(exc), file=sys.stderr)
     r = requests.get(f"{URL}/rest/v1/audits?status=eq.queued&order=created_at.asc&limit=3", headers=H, timeout=30)
     r.raise_for_status()
     for a in r.json():
