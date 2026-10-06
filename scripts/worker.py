@@ -24,17 +24,23 @@ def patch(audit_id: str, **fields) -> None:
     r.raise_for_status()
 
 
+def part_paths(a: dict) -> list[str]:
+    n = int(a.get("parts") or 1)
+    return [a["video_path"]] if n == 1 else [f"{a['video_path']}.p{i:02d}" for i in range(n)]
+
+
 def process(a: dict) -> None:
     audit_id = a["id"]
     patch(audit_id, status="running")
     tmp = Path(tempfile.mkdtemp())
     video = tmp / f"{audit_id}{Path(a['video_path']).suffix or '.mp4'}"
     try:
-        with requests.get(f"{URL}/storage/v1/object/videos/{a['video_path']}", headers=H, stream=True, timeout=300) as r:
-            r.raise_for_status()
-            with open(video, "wb") as f:
-                for chunk in r.iter_content(1 << 20):
-                    f.write(chunk)
+        with open(video, "wb") as f:  # vidéo envoyée en morceaux de 45 Mo (limite du stockage gratuit) : on recolle
+            for part in part_paths(a):
+                with requests.get(f"{URL}/storage/v1/object/videos/{part}", headers=H, stream=True, timeout=300) as r:
+                    r.raise_for_status()
+                    for chunk in r.iter_content(1 << 20):
+                        f.write(chunk)
         report = run(video, a["subject"], a["context"] or "appel de vente (interlocuteur externe)")
         report_path = f"{a['user_id']}/{audit_id}.html"
         up = requests.post(
@@ -50,7 +56,8 @@ def process(a: dict) -> None:
         traceback.print_exc()
         patch(audit_id, status="error", error="L'analyse a échoué. Réessayez avec une autre vidéo.")
     finally:
-        requests.delete(f"{URL}/storage/v1/object/videos/{a['video_path']}", headers=H, timeout=30)  # on ne garde pas la vidéo
+        for part in part_paths(a):  # on ne garde pas la vidéo
+            requests.delete(f"{URL}/storage/v1/object/videos/{part}", headers=H, timeout=30)
 
 
 def release_stuck() -> None:
