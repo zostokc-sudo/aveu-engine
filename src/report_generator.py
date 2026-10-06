@@ -24,6 +24,8 @@ Deux principes de précision, appris en testant l'outil sur de vraies vidéos :
 """
 
 import json
+import re
+import time
 import statistics
 import sys
 from pathlib import Path
@@ -337,14 +339,38 @@ def generate_report(
         raise ValueError("Aucune fenêtre exploitable (visage jamais détecté de façon fiable).")
     system = SYSTEM_PROMPT.format(context=context)
     intro = "Voici la timeline de l'enregistrement, en JSON. Produis le rapport d'analyse comportementale.\n\n"
-    timeline = _fit_timeline_to_budget(timeline, system, intro)
-
-    report = llm_parse(
-        system=system,
-        user=intro + json.dumps(_compact_for_prompt(timeline), ensure_ascii=False),
-        output_format=BehaviorReport,
-        max_tokens=_GROQ_MAX_OUTPUT,
-    )
+    chosen = _fit_timeline_to_budget(timeline, system, intro)
+    n, out_tokens = len(chosen), _GROQ_MAX_OUTPUT
+    report = None
+    for _attempt in range(6):
+        chosen = select_salient_windows(timeline, n)
+        try:
+            report = llm_parse(
+                system=system,
+                user=intro + json.dumps(_compact_for_prompt(chosen), ensure_ascii=False),
+                output_format=BehaviorReport,
+                max_tokens=out_tokens,
+            )
+            break
+        except Exception as exc:  # le plafond gratuit de Groq se règle en réduisant la requête, pas en échouant
+            msg = str(exc)
+            limits = re.search(r"Limit (\d+), Requested (\d+)", msg)
+            if limits:
+                limit, requested = int(limits.group(1)), int(limits.group(2))
+                n = max(6, int(n * max(limit - out_tokens, 1500) / requested * 0.85))
+                if "rate_limit" in msg and "Request too large" not in msg:
+                    time.sleep(30)
+            elif "max completion tokens" in msg or "truncated" in msg.lower():
+                out_tokens = min(out_tokens + 900, 5200)
+                n = max(6, int(n * 0.8))
+            elif "429" in msg or "rate" in msg.lower():
+                time.sleep(30)
+            else:
+                raise
+            print(f"Groq : requête ajustée ({n} fenêtres, {out_tokens} tokens de sortie max)", file=sys.stderr)
+    if report is None:
+        raise RuntimeError("Le modèle n'a pas pu produire le rapport dans la limite gratuite.")
+    timeline = chosen
     for warning in quality_warnings(report, timeline):
         print(f"QUALITY WARNING: {warning}", file=sys.stderr)
     return report

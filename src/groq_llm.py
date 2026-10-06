@@ -98,6 +98,7 @@ def parse(system: str, user: str, output_format: type[BaseModel], max_tokens: in
         try:
             response = client.chat.completions.create(
                 model=MODEL, max_tokens=max_tokens, messages=messages, response_format=schema,
+                reasoning_effort="low",  # moins de tokens de réflexion = rapport complet dans le budget gratuit
             )
             return output_format.model_validate_json(response.choices[0].message.content)
         except Exception as e:
