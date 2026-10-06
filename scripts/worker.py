@@ -53,7 +53,20 @@ def process(a: dict) -> None:
         requests.delete(f"{URL}/storage/v1/object/videos/{a['video_path']}", headers=H, timeout=30)  # on ne garde pas la vidéo
 
 
+def release_stuck() -> None:
+    """Un audit bloqué en 'running' (job GitHub interrompu) repasse en erreur au bout de 90 min."""
+    from datetime import datetime, timedelta, timezone
+    limit = (datetime.now(timezone.utc) - timedelta(minutes=90)).isoformat()
+    r = requests.patch(
+        f"{URL}/rest/v1/audits?status=eq.running&created_at=lt.{limit}",
+        headers={**H, "Content-Type": "application/json"},
+        json={"status": "error", "error": "L'analyse a été interrompue. Renvoyez votre vidéo."}, timeout=30,
+    )
+    r.raise_for_status()
+
+
 def main() -> None:
+    release_stuck()
     r = requests.get(f"{URL}/rest/v1/audits?status=eq.queued&order=created_at.asc&limit=3", headers=H, timeout=30)
     r.raise_for_status()
     for a in r.json():
