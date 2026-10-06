@@ -9,3 +9,4 @@ librosa==1.0.0
 weasyprint==70.0
 faster-whisper
 requests
+sherpa-onnx

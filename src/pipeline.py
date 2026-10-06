@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 
 from audio_analysis import analyze_audio
+from diarize import diarize, filmed_speaker, label_segments
 from extract_audio import extract_audio, probe_duration
 from html_report import render_html, render_pdf
 from report_generator import compute_behavior_profile, generate_report, save_report_json
@@ -41,6 +42,12 @@ def run(video_path: Path, subject_name: str, context: str) -> Path:
     warning = check_multi_face_warning(buckets)
     if warning:
         raise MultipleFacesDetected(warning)
+
+    turns = diarize(wav_path)
+    if label_segments(segments, turns, filmed_speaker(turns, buckets)):
+        print("Voix séparées : la personne filmée est identifiée.")
+    else:
+        print("Voix non séparées (une seule voix, modèles absents ou doute) : texte non étiqueté.")
 
     print(f"[5/7] Génération du rapport (Claude)…")
     report = generate_report(segments, buckets, context=context, audio_buckets=audio_buckets)

@@ -30,6 +30,7 @@ class Segment:
     start: float
     end: float
     words: list[Word]
+    speaker: str | None = None  # "filmed" (personne à l'écran) / "other" ; renseigné par diarize.label_segments
 
 
 def _transcribe_cpu(wav_path: Path) -> list[Segment]:

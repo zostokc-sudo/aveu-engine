@@ -55,7 +55,9 @@ fréquence cardiaque, pouls, transpiration, dilatation des pupilles ou autre \
 signal biométrique — rien de tout cela n'est mesuré.
 
 Chaque fenêtre de la timeline (enregistrement en {context}) contient \
-spoken_text (transcription SANS distinction des locuteurs), speech_ratio \
+spoken_text (transcription ; si other_said est présent, les voix ont été \
+séparées : spoken_text = la personne FILMÉE, other_said = extrait de son \
+interlocuteur, à lire comme contexte seulement, jamais à analyser), speech_ratio \
 (audio) et visual_speech_ratio (lèvres de la personne filmée) — si \
 speech_ratio est haut mais visual_speech_ratio bas, quelqu'un d'AUTRE parle \
 (hors champ) : n'attribue pas le texte à la personne filmée, lis plutôt sa \
@@ -220,9 +222,12 @@ def merge_timeline(
 
     timeline = []
     for b, signals in zip(usable, signal_dicts):
-        spoken = " ".join(
-            s.text for s in segments if s.start < b.end and s.end > b.start
-        ).strip()
+        labelled = any(s.speaker for s in segments)  # voix séparées par diarize.py ?
+        own = [s for s in segments if s.speaker == "filmed"] if labelled else segments
+        spoken = " ".join(s.text for s in own if s.start < b.end and s.end > b.start).strip()
+        other = " ".join(
+            s.text for s in segments if s.speaker == "other" and s.start < b.end and s.end > b.start
+        ).strip() if labelled else ""
         for key in _BASELINE_SIGNALS:
             signals[f"{key}_vs_baseline"] = round(signals[key] - baseline[key], 3)
 
@@ -230,9 +235,10 @@ def merge_timeline(
             "start_sec": round(b.start, 1),
             "end_sec": round(b.end, 1),
             "spoken_text": spoken,
-            "speech_ratio": _speech_ratio(segments, b.start, b.end),
-            "avg_pause_ms": _avg_pause_ms(segments, b.start, b.end),
+            "speech_ratio": _speech_ratio(own, b.start, b.end),
+            "avg_pause_ms": _avg_pause_ms(own, b.start, b.end),
             "signals": signals,
+            **({"other_said": other} if labelled and other else {}),
         })
     return timeline
 
@@ -305,6 +311,7 @@ def _compact_for_prompt(timeline: list[dict]) -> list[dict]:
         {
             "start_sec": _r(w["start_sec"]), "end_sec": _r(w["end_sec"]),
             "spoken_text": w["spoken_text"][:220], "speech_ratio": _r(w["speech_ratio"]),
+            **({"other_said": w["other_said"][:120]} if w.get("other_said") else {}),
             "avg_pause_ms": _r(w["avg_pause_ms"]),
             "signals": {k: _r(w["signals"][k]) for k in _PROMPT_SIGNAL_KEYS if w["signals"].get(k)},
         }
