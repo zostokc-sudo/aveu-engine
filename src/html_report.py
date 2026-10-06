@@ -32,6 +32,8 @@ def render_html(
     context: str,
     duration_min: float,
     behavior_profile: dict[str, float] | None = None,
+    transcript: list[dict] | None = None,
+    convo: dict | None = None,
 ) -> Path:
     behavior_profile = behavior_profile or {}
     env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)), autoescape=select_autoescape(["html"]))
@@ -44,6 +46,8 @@ def render_html(
         duration_min=round(duration_min, 1),
         generated_date=date.today().isoformat(),
         radar=_build_radar_data(report, behavior_profile),
+        transcript=transcript or [],
+        convo=convo,
     )
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(html, encoding="utf-8")

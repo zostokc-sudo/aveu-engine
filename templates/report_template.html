@@ -88,6 +88,18 @@
   .am-nav button:hover { background: #e6dec9; }
   .axis-grid-print { display: none; }
   @media print { .axis-grid-print { display: block; } .g-tip { display: none; } }
+  .convo { background: var(--card); border-radius: 26px; padding: 22px; box-shadow: 0 6px 24px rgba(60,50,30,.07); }
+  .convo-bar { display: flex; height: 44px; border-radius: 999px; overflow: hidden; font-weight: 700; font-size: 14px; }
+  .convo-bar span { display: grid; place-items: center; background: #e9dcc0; color: #3b3528; min-width: 0; white-space: nowrap; }
+  .convo-bar span.p { background: #cfe5d6; color: #1e5a38; }
+  .convo-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 16px; text-align: center; }
+  .convo-stats b { display: block; font-size: 26px; font-family: var(--font-mono); }
+  .convo-stats small { color: var(--muted); font-size: 12.5px; }
+  .convo-advice { margin: 14px 0 0; font-size: 15px; }
+  details.transcript { background: var(--card); border-radius: 22px; padding: 14px 20px; box-shadow: 0 4px 16px rgba(60,50,30,.06); }
+  details.transcript summary { cursor: pointer; font-weight: 700; font-size: 16px; }
+  .tr-lines { max-height: 420px; overflow-y: auto; margin-top: 12px; font-size: 14.5px; }
+  .tr-lines p { margin: 0 0 8px; } .tr-t { color: var(--muted); font-family: var(--font-mono); font-size: 12px; margin-right: 6px; }
   .hero-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; align-items: start; }
   .radar-card {
     background: var(--card); border-radius: 8px; padding: 16px 8px 20px;
@@ -213,6 +225,36 @@
         <div class="eyebrow2">Verdict closing</div>
         {{ report.closing_verdict }}
       </div>
+    </section>
+    {% endif %}
+
+    {% if convo %}
+    <section>
+      <h2>Votre discours (les mots, pas les émotions)</h2>
+      <div class="convo">
+        <div class="convo-bar" role="img" aria-label="Temps de parole : vous {{ convo.other_share }} %, le prospect {{ convo.filmed_share }} %">
+          <span style="width:{{ convo.other_share }}%">Vous {{ convo.other_share }} %</span><span class="p" style="width:{{ convo.filmed_share }}%">Prospect {{ convo.filmed_share }} %</span>
+        </div>
+        <div class="convo-stats">
+          <div><b>{{ convo.other_questions }}</b><small>questions posées par vous</small></div>
+          <div><b>{{ convo.other_longest_sec }} s</b><small>votre plus long passage sans interruption</small></div>
+          <div><b>{{ convo.filmed_questions }}</b><small>questions du prospect</small></div>
+        </div>
+        <p class="convo-advice">{{ convo.advice }}{% if convo.monologue_warning %} Un passage de plus d'1 min 30 sans laisser la parole est long : coupez-le avec une question.{% endif %}</p>
+      </div>
+    </section>
+    {% endif %}
+
+    {% if transcript %}
+    <section>
+      <details class="transcript">
+        <summary>📝 Transcription complète ({{ transcript|length }} passages)</summary>
+        <div class="tr-lines">
+          {% for l in transcript %}
+          <p><span class="tr-t">{{ '%d:%02d' % (l.t // 60, l.t % 60) }}</span> {% if l.who %}<b>{{ l.who }} :</b> {% endif %}{{ l.text }}</p>
+          {% endfor %}
+        </div>
+      </details>
     </section>
     {% endif %}
 

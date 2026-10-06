@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 
 from audio_analysis import analyze_audio
+from conversation import conversation_metrics, transcript_lines
 from diarize import diarize, filmed_speaker, label_segments
 from extract_audio import extract_audio, probe_duration
 from html_report import render_html, render_pdf
@@ -58,6 +59,7 @@ def run(video_path: Path, subject_name: str, context: str) -> Path:
         report, run_dir / "report.html",
         subject_name=subject_name, context=context, duration_min=duration / 60,
         behavior_profile=compute_behavior_profile(buckets),
+        transcript=transcript_lines(segments), convo=conversation_metrics(segments),
     )
 
     print(f"[7/7] Export PDF…")
