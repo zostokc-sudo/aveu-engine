@@ -36,3 +36,19 @@ def probe_duration(video_path: Path) -> float:
         text=True,
     )
     return float(result.stdout.strip())
+
+
+def normalize_video(video_path: Path, out_path: Path, height: int = 480) -> Path:
+    """Recode la vidéo en H.264 480p / 10 images par seconde, sans le son.
+
+    Pourquoi : OpenCV (sur Linux) ne sait pas lire certains codecs courants (AV1 de YouTube, HEVC…), ce qui
+    donnait « aucun visage » sur une vidéo pourtant parfaite. Une copie H.264 se lit partout, et 480p / 10 i/s
+    suffisent à l'analyse (5 images par seconde sont lues) tout en divisant le temps de calcul."""
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        [FFMPEG, "-y", "-loglevel", "error", "-i", str(video_path), "-an",
+         "-vf", f"scale=-2:{height}:force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2",
+         "-r", "10", "-c:v", "libx264", "-preset", "veryfast", "-crf", "27", "-pix_fmt", "yuv420p", str(out_path)],
+        check=True,
+    )
+    return out_path

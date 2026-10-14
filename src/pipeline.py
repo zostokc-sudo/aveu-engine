@@ -6,7 +6,7 @@ from pathlib import Path
 from audio_analysis import analyze_audio
 from conversation import conversation_metrics, transcript_lines
 from diarize import diarize, filmed_speaker, label_segments
-from extract_audio import extract_audio, probe_duration
+from extract_audio import extract_audio, normalize_video, probe_duration
 from html_report import render_html, render_pdf
 from report_generator import compute_behavior_profile, generate_report, save_report_json
 from transcribe import transcribe
@@ -34,6 +34,8 @@ def run(video_path: Path, subject_name: str, context: str) -> Path:
     wav_path = extract_audio(video_path, run_dir / "audio.wav")
     duration = probe_duration(video_path)
 
+    print("Préparation de la vidéo (H.264 480p)…")
+    video_path = normalize_video(video_path, run_dir / "video_480p.mp4")
     coverage = probe_face_coverage(video_path, duration)
     if coverage < 0.2:
         raise NoFaceDetected(
