@@ -359,3 +359,29 @@ def _visual_speech_ratio(face_frames: list[FrameSignals]) -> float:
     ]
     active = sum(1 for d in deltas if d > _LIP_ACTIVITY_THRESHOLD)
     return active / len(deltas)
+
+
+def probe_face_coverage(video_path: Path, duration_sec: float, samples: int = 12) -> float:
+    """Contrôle rapide AVANT toute analyse lourde : sur `samples` images réparties dans la vidéo, quelle part
+    contient un visage ? Évite de transcrire 40 minutes pour découvrir ensuite qu'aucun visage n'est exploitable."""
+    import mediapipe as mp
+
+    options = FaceLandmarkerOptions(
+        base_options=BaseOptions(model_asset_path=str(MODELS_DIR / "face_landmarker.task")),
+        running_mode=RunningMode.IMAGE, num_faces=2,
+    )
+    cap = cv2.VideoCapture(str(video_path))
+    hits = seen = 0
+    try:
+        with FaceLandmarker.create_from_options(options) as landmarker:
+            for i in range(samples):
+                cap.set(cv2.CAP_PROP_POS_MSEC, duration_sec * 1000 * (i + 0.5) / samples)
+                ok, frame = cap.read()
+                if not ok:
+                    continue
+                seen += 1
+                image = mp.Image(image_format=mp.ImageFormat.SRGB, data=cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+                hits += 1 if landmarker.detect(image).face_landmarks else 0
+    finally:
+        cap.release()
+    return hits / seen if seen else 0.0

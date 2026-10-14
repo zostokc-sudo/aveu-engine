@@ -10,9 +10,13 @@ from extract_audio import extract_audio, probe_duration
 from html_report import render_html, render_pdf
 from report_generator import compute_behavior_profile, generate_report, save_report_json
 from transcribe import transcribe
-from visual_analysis import analyze_video, bucketize, check_multi_face_warning
+from visual_analysis import analyze_video, bucketize, check_multi_face_warning, probe_face_coverage
 
 WORK_DIR = Path(__file__).parent.parent / "output"
+
+
+class NoFaceDetected(RuntimeError):
+    """Aucun visage exploitable dans la vidéo : on le dit tout de suite, avant de calculer quoi que ce soit."""
 
 
 class MultipleFacesDetected(RuntimeError):
@@ -29,6 +33,13 @@ def run(video_path: Path, subject_name: str, context: str) -> Path:
     print(f"[1/7] Extraction audio…")
     wav_path = extract_audio(video_path, run_dir / "audio.wav")
     duration = probe_duration(video_path)
+
+    coverage = probe_face_coverage(video_path, duration)
+    if coverage < 0.2:
+        raise NoFaceDetected(
+            "Aucun visage exploitable dans cette vidéo (filmez le prospect de face, en gros plan, "
+            "ou exportez la vue « galerie » plutôt que le partage d'écran)."
+        )
 
     print(f"[2/7] Transcription…")
     segments = transcribe(wav_path)
