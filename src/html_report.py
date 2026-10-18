@@ -5,7 +5,7 @@ from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-from radar_chart import RadarAxis, build_radar, score_color
+from radar_chart import RadarAxis, _soft_tint, build_radar, score_color
 from schema import BehaviorReport, PreCallBrief
 
 TEMPLATES_DIR = Path(__file__).parent.parent / "templates"
@@ -25,6 +25,42 @@ def _build_radar_data(report: BehaviorReport, behavior_profile: dict[str, float]
     return build_radar(axes)
 
 
+_RING_R = 38
+_RING_C = 2 * 3.141592653589793 * _RING_R
+
+
+def debrief_view(debrief: dict | None) -> dict | None:
+    """Ajoute à chaque étape du débrief ce qu'il faut pour dessiner son anneau (couleur, arc, libellé)."""
+    if not debrief:
+        return None
+    cards = []
+    for d in debrief["scorecard"]:
+        color = score_color(d["score"])
+        cards.append({
+            **d, "color": color, "soft": _soft_tint(color),
+            "dash": f"{_RING_C * d['score'] / 100:.1f} {_RING_C:.1f}",
+            "verdict_label": "Point fort" if d["score"] >= 70 else "À consolider" if d["score"] >= 40 else "À travailler",
+        })
+    return {**debrief, "cards": cards}
+
+
+def render_debrief_only(
+    debrief: dict, out_path: Path, subject_name: str, context: str, duration_min: float,
+    visual_note: str = "", transcript: list[dict] | None = None, convo: dict | None = None,
+) -> Path:
+    """Rapport « débrief du closer » seul : utilisé quand l'analyse du visage n'est pas possible
+    (pas de visage exploitable, plusieurs visages, audio seul)."""
+    env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)), autoescape=select_autoescape(["html"]))
+    html = env.get_template("debrief_template.html").render(
+        debrief=debrief_view(debrief), subject_name=subject_name, context=context,
+        duration_min=round(duration_min, 1), generated_date=date.today().isoformat(),
+        visual_note=visual_note, transcript=transcript or [], convo=convo,
+    )
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(html, encoding="utf-8")
+    return out_path
+
+
 def render_html(
     report: BehaviorReport,
     out_path: Path,
@@ -34,6 +70,7 @@ def render_html(
     behavior_profile: dict[str, float] | None = None,
     transcript: list[dict] | None = None,
     convo: dict | None = None,
+    debrief: dict | None = None,
 ) -> Path:
     behavior_profile = behavior_profile or {}
     env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)), autoescape=select_autoescape(["html"]))
@@ -48,6 +85,7 @@ def render_html(
         radar=_build_radar_data(report, behavior_profile),
         transcript=transcript or [],
         convo=convo,
+        debrief=debrief_view(debrief),
     )
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(html, encoding="utf-8")

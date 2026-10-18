@@ -1,0 +1,83 @@
+<style>
+  .db-sum { background: var(--card); border-radius: 26px; padding: 22px 26px; font-size: 17px; box-shadow: 0 6px 24px rgba(60,50,30,.07); }
+  .db-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 16px; margin-top: 18px; }
+  .db-card { background: var(--card); border-radius: 26px; padding: 20px; box-shadow: 0 6px 24px rgba(60,50,30,.07); }
+  .db-head { display: flex; align-items: center; gap: 14px; }
+  .db-head svg { width: 64px; height: 64px; flex: none; }
+  .db-head h3 { margin: 0; font-size: 19px; }
+  .db-head .pill { display: inline-block; margin-top: 4px; padding: 3px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 700; }
+  .db-verdict { margin: 12px 0 0; font-size: 15px; }
+  .db-quote { margin: 12px 0 0; padding: 10px 14px; border-left: 4px solid var(--gold-dim); background: #faf7ef; border-radius: 0 14px 14px 0; font-size: 14px; font-style: italic; }
+  .db-quote small { font-style: normal; color: var(--muted); font-family: var(--font-mono); }
+  .db-say { margin: 12px 0 0; padding: 12px 14px; border-radius: 16px; background: #e8f3ec; color: #1e5a38; font-size: 14.5px; }
+  .db-say b { display: block; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; margin-bottom: 3px; }
+  .db-prio { display: grid; gap: 10px; margin-top: 16px; }
+  .db-prio label { display: flex; gap: 14px; align-items: center; background: var(--card); border-radius: 22px; padding: 14px 18px; font-size: 16px; box-shadow: 0 4px 14px rgba(60,50,30,.07); cursor: pointer; }
+  .db-prio .n { width: 34px; height: 34px; border-radius: 50%; background: var(--navy); color: #fff; display: grid; place-items: center; font-weight: 700; flex: none; }
+  .db-prio input { width: 22px; height: 22px; accent-color: #1e8449; flex: none; margin-left: auto; }
+  .db-prio input:checked ~ span.t { text-decoration: line-through; opacity: .5; }
+  .db-miss { background: #fff7ee; border: 1px solid #f0dcc0; border-radius: 22px; padding: 16px 18px; margin-top: 12px; font-size: 14.5px; }
+  .db-miss .at { font-family: var(--font-mono); color: var(--muted); font-size: 12px; }
+  .db-str { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+  .db-str div { background: #e8f3ec; border-radius: 20px; padding: 12px 16px; font-size: 14px; max-width: 420px; }
+  .db-next { margin-top: 16px; padding: 14px 18px; border-radius: 20px; font-weight: 600; }
+  .db-note { margin-top: 14px; color: var(--muted); font-size: 13px; }
+</style>
+<section>
+  <h2>Débrief du closer — ce que vous avez dit et fait</h2>
+  <div class="db-sum">{{ debrief.summary }}</div>
+
+  <h2 style="margin-top:34px">Vos 3 priorités pour le prochain appel</h2>
+  <div class="db-prio">
+    {% for p in debrief.priorities %}
+    <label><span class="n">{{ loop.index }}</span><span class="t">{{ p }}</span><input type="checkbox" data-db="{{ loop.index0 }}"></label>
+    {% endfor %}
+  </div>
+
+  <h2 style="margin-top:34px">Les 6 étapes de votre appel</h2>
+  <div class="db-grid">
+    {% for d in debrief.cards %}
+    <div class="db-card">
+      <div class="db-head">
+        <svg viewBox="0 0 100 100" aria-hidden="true">
+          <circle cx="50" cy="50" r="38" fill="none" stroke="{{ d.soft }}" stroke-width="11"/>
+          <circle cx="50" cy="50" r="38" fill="none" stroke="{{ d.color }}" stroke-width="11" stroke-linecap="round" stroke-dasharray="{{ d.dash }}" transform="rotate(-90 50 50)"/>
+          <text x="50" y="58" text-anchor="middle" font-size="26" font-weight="700" fill="{{ d.color }}">{{ d.score }}</text>
+        </svg>
+        <div><h3>{{ d.label }}</h3><span class="pill" style="background:{{ d.soft }};color:{{ d.color }}">{{ d.verdict_label }}</span></div>
+      </div>
+      <p class="db-verdict">{{ d.verdict }}</p>
+      {% if d.quote %}<div class="db-quote">« {{ d.quote }} » <small>{{ d.at }}</small></div>{% endif %}
+      <div class="db-say"><b>À dire plutôt, la prochaine fois</b>{{ d.improvement }}</div>
+    </div>
+    {% endfor %}
+  </div>
+
+  {% if debrief.strengths %}
+  <h2 style="margin-top:34px">Ce qui a bien marché</h2>
+  <div class="db-str">{% for s in debrief.strengths %}<div>« {{ s.quote }} » <small style="color:var(--muted)">{{ s.at }}</small><br><b>{{ s.why }}</b></div>{% endfor %}</div>
+  {% endif %}
+
+  {% if debrief.missed %}
+  <h2 style="margin-top:34px">Les occasions manquées</h2>
+  {% for m in debrief.missed %}
+  <div class="db-miss"><span class="at">{{ m.at }}</span><br>
+    {% if m.prospect_said %}Le prospect : <i>« {{ m.prospect_said }} »</i><br>{% endif %}
+    Vous : {{ m.closer_did }}<br><b style="color:#1e5a38">Mieux : « {{ m.better_move }} »</b></div>
+  {% endfor %}
+  {% endif %}
+
+  <div class="db-next" style="background:{{ '#e8f3ec' if debrief.next_step_secured else '#fbeae7' }};color:{{ '#1e5a38' if debrief.next_step_secured else '#8a2b1f' }}">
+    {{ '✅ Prochaine étape fixée' if debrief.next_step_secured else '⚠️ Pas de prochaine étape fixée' }} — {{ debrief.next_step_detail }}
+  </div>
+  <p class="db-note">Ce débrief ne lit que les mots de l'appel : aucune émotion n'est déduite de personne.{% if debrief.roles_inferred %} Les rôles (closer / prospect) ont été déduits du texte ; en cas d'erreur, relancez avec un enregistrement où les voix sont séparées.{% endif %}</p>
+</section>
+<script>
+(function () {
+  var K = "aveu.debrief." + location.pathname;
+  document.querySelectorAll(".db-prio input").forEach(function (c) {
+    try { c.checked = localStorage.getItem(K + c.dataset.db) === "1"; } catch (e) {}
+    c.onchange = function () { try { localStorage.setItem(K + c.dataset.db, c.checked ? "1" : "0"); } catch (e) {} };
+  });
+})();
+</script>

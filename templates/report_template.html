@@ -196,6 +196,8 @@
       <div class="summary-box">{{ report.executive_summary }}</div>
     </section>
 
+    {% if debrief %}{% include '_debrief.html' %}{% endif %}
+
     {% if radar and radar.explanations %}
     <section>
       <h2>En un coup d'œil</h2>

@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aveu — Débrief du closer — {{ subject_name }}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,380;0,9..144,560&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root { --navy:#0f1e35; --navy-light:#1b3358; --gold:#b8934f; --gold-dim:#d9c39a; --ink:#1a1f2b; --muted:#6b7280; --bg:#f7f6f3; --card:#fff; --font-display:"Fraunces",Georgia,serif; --font-body:"IBM Plex Sans",-apple-system,"Segoe UI",sans-serif; --font-mono:"IBM Plex Mono","SF Mono",Consolas,monospace; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:var(--font-body); background:var(--bg); color:var(--ink); line-height:1.55; }
+  .header { background:linear-gradient(135deg,var(--navy),var(--navy-light)); color:#fff; padding:44px 40px; }
+  .header .eyebrow { color:var(--gold-dim); font-family:var(--font-mono); font-size:12px; letter-spacing:2px; text-transform:uppercase; margin-bottom:10px; }
+  .header h1 { margin:0 0 6px; font-family:var(--font-display); font-size:30px; font-weight:560; }
+  .header .meta { color:#b8c2d4; font-family:var(--font-mono); font-size:13px; margin-top:12px; }
+  .container { max-width:960px; margin:0 auto; padding:0 28px 64px; }
+  section { margin-top:40px; }
+  h2 { font-family:var(--font-mono); font-size:13px; letter-spacing:1.5px; text-transform:uppercase; color:var(--navy); border-bottom:2px solid var(--gold); padding-bottom:10px; font-weight:500; }
+  .notice { background:#fff7ee; border:1px solid #f0dcc0; border-radius:20px; padding:14px 18px; margin-top:28px; font-size:14.5px; }
+  .convo { background:var(--card); border-radius:26px; padding:22px; box-shadow:0 6px 24px rgba(60,50,30,.07); }
+  .convo-bar { display:flex; height:44px; border-radius:999px; overflow:hidden; font-weight:700; font-size:14px; }
+  .convo-bar span { display:grid; place-items:center; background:#e9dcc0; color:#3b3528; white-space:nowrap; }
+  .convo-bar span.p { background:#cfe5d6; color:#1e5a38; }
+  .convo-stats { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:16px; text-align:center; }
+  .convo-stats b { display:block; font-size:26px; font-family:var(--font-mono); } .convo-stats small { color:var(--muted); font-size:12.5px; }
+  details.transcript { background:var(--card); border-radius:22px; padding:14px 20px; box-shadow:0 4px 16px rgba(60,50,30,.06); }
+  details.transcript summary { cursor:pointer; font-weight:700; font-size:16px; }
+  .tr-lines { max-height:420px; overflow-y:auto; margin-top:12px; font-size:14.5px; } .tr-lines p { margin:0 0 8px; }
+  .tr-t { color:var(--muted); font-family:var(--font-mono); font-size:12px; margin-right:6px; }
+</style>
+</head>
+<body>
+  <div class="header">
+    <div class="eyebrow">Aveu — débrief du closer — confidentiel</div>
+    <h1>{{ subject_name }}</h1>
+    <div class="meta">{{ context }} · durée {{ duration_min }} min · généré le {{ generated_date }}</div>
+  </div>
+  <div class="container">
+    {% if visual_note %}<div class="notice">ℹ️ {{ visual_note }}</div>{% endif %}
+    {% include '_debrief.html' %}
+    {% if convo %}
+    <section>
+      <h2>Temps de parole</h2>
+      <div class="convo">
+        <div class="convo-bar"><span style="width:{{ convo.other_share }}%">Vous {{ convo.other_share }} %</span><span class="p" style="width:{{ convo.filmed_share }}%">Prospect {{ convo.filmed_share }} %</span></div>
+        <div class="convo-stats">
+          <div><b>{{ convo.other_questions }}</b><small>questions posées par vous</small></div>
+          <div><b>{{ convo.other_longest_sec }} s</b><small>votre plus long passage</small></div>
+          <div><b>{{ convo.filmed_questions }}</b><small>questions du prospect</small></div>
+        </div>
+        <p style="margin:14px 0 0">{{ convo.advice }}</p>
+      </div>
+    </section>
+    {% endif %}
+    {% if transcript %}
+    <section><details class="transcript"><summary>📝 Transcription complète ({{ transcript|length }} passages)</summary>
+      <div class="tr-lines">{% for l in transcript %}<p><span class="tr-t">{{ '%d:%02d' % (l.t // 60, l.t % 60) }}</span> {% if l.who %}<b>{{ l.who }} :</b> {% endif %}{{ l.text }}</p>{% endfor %}</div>
+    </details></section>
+    {% endif %}
+  </div>
+</body>
+</html>

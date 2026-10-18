@@ -12,7 +12,7 @@ from pathlib import Path
 import requests
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-from pipeline import MultipleFacesDetected, NoFaceDetected, run  # noqa: E402
+from pipeline import MultipleFacesDetected, NoFaceDetected, NoUsableContent, run  # noqa: E402
 
 URL = os.environ["SUPABASE_URL"].rstrip("/")
 KEY = os.environ["SUPABASE_SERVICE_KEY"]
@@ -49,7 +49,7 @@ def process(a: dict) -> None:
         )
         up.raise_for_status()
         patch(audit_id, status="done", report_path=report_path)
-    except (MultipleFacesDetected, NoFaceDetected) as exc:
+    except (MultipleFacesDetected, NoFaceDetected, NoUsableContent) as exc:
         patch(audit_id, status="error", error=str(exc)[:300])
     except Exception as exc:  # message court côté client, détail dans les logs Actions
         print("ERREUR", audit_id, repr(exc), file=sys.stderr)
