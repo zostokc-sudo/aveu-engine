@@ -6,6 +6,7 @@ Variables : SUPABASE_URL, SUPABASE_SERVICE_KEY, GROQ_API_KEY."""
 import os
 import sys
 import tempfile
+import time
 import traceback
 from pathlib import Path
 
@@ -80,7 +81,9 @@ def main() -> None:
         print("release_stuck a échoué :", repr(exc), file=sys.stderr)
     r = requests.get(f"{URL}/rest/v1/audits?status=eq.queued&order=created_at.asc&limit=3", headers=H, timeout=30)
     r.raise_for_status()
-    for a in r.json():
+    for n, a in enumerate(r.json()):
+        if n:
+            time.sleep(60)  # plafond gratuit Groq par minute : on laisse la fenêtre se vider entre deux audits
         process(a)
 
 

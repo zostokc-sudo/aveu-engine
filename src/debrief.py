@@ -41,6 +41,7 @@ class Note(BaseModel):
 
 
 class ChunkNotes(BaseModel):
+    is_sales_conversation: bool = Field(description="vrai si cette tranche est un ÉCHANGE entre un vendeur et un prospect (besoin, offre, prix, objection…) ; faux pour une conférence, un cours, un monologue ou un échange sans enjeu de vente")
     notes: list[Note] = Field(description="10 notes maximum, les plus significatives de cette tranche")
 
 
@@ -102,10 +103,14 @@ RÈGLES STRICTES :
 - improvement et better_move : une vraie phrase que le closer peut dire, naturelle, en français, adaptée à CET appel.
 - Ton : direct, concret, bienveillant, tutoiement interdit (vouvoiement). Pas de jargon sans l'expliquer.
 - Aucune émotion supposée, aucun diagnostic psychologique du prospect ou du closer.
-- Exactement 6 entrées dans scorecard et exactement 3 priorités."""
+- Exactement 6 entrées dans scorecard et exactement 3 priorités.
+- COHÉRENCE : le score doit refléter le verdict (un verdict qui pointe un défaut ⇒ score inférieur à 55 ; une étape bien menée ⇒ au moins 70).
+- Pour juger l'OUVERTURE et la CONCLUSION, appuie-toi d'abord sur les extraits bruts du début et de la fin de l'appel fournis ; \
+n'écris jamais « aucune ouverture » ou « aucune conclusion » si ces extraits en montrent une."""
 
 _CHUNK_CHARS = 7000
-_MAX_NOTES_REDUCE = 40
+_MAX_NOTES_REDUCE = 32
+_EDGE_CHARS = 900  # extraits bruts du début et de la fin, pour juger l'ouverture et la conclusion sur le texte réel
 _SLEEP_BETWEEN_CALLS = 40  # secondes : garde le débit sous 8000 tokens/minute (plafond gratuit Groq)
 _STOP = {"les", "des", "une", "que", "qui", "pas", "pour", "dans", "avec", "vous", "nous", "est", "sont", "the", "and", "you", "that", "this", "ça", "ce", "cette", "mais", "donc", "alors", "oui", "non"}
 
@@ -167,7 +172,12 @@ def _call(system: str, user: str, model_cls, max_tokens: int):
     raise last
 
 
+class NotASalesCall(RuntimeError):
+    """L'enregistrement n'est pas un appel de vente (conférence, cours, monologue…) : pas de débrief de closer."""
+
+
 def collect_notes(segments, progress=print) -> list[Note]:
+    votes: list[bool] = []
     lines = transcript_text_lines(segments)
     chunks = chunk_lines(lines)
     notes: list[Note] = []
@@ -176,10 +186,13 @@ def collect_notes(segments, progress=print) -> list[Note]:
         try:
             result = _call(_MAP_SYSTEM, "Tranche de transcription :\n\n" + chunk, ChunkNotes, 1800)
             notes.extend(result.notes)
+            votes.append(result.is_sales_conversation)
         except Exception as exc:
             print(f"Débrief : tranche {i + 1} ignorée ({exc!r})", file=sys.stderr)
         if i < len(chunks) - 1:
             time.sleep(_SLEEP_BETWEEN_CALLS)
+    if votes and sum(votes) / len(votes) < 0.5:
+        raise NotASalesCall("Cet enregistrement ne ressemble pas à un appel de vente (conférence, cours ou monologue).")
     return [n for n in notes if quote_is_grounded(n.quote, n.t_sec, segments)]
 
 
@@ -200,10 +213,13 @@ def build_debrief(segments, roles_inferred: bool, progress=print) -> dict | None
     selected = _select_notes(notes)
     time.sleep(_SLEEP_BETWEEN_CALLS)
     progress("Débrief : rédaction…")
+    lines = [line for _, line in transcript_text_lines(segments)]
+    joined = "\n".join(lines)
+    edges = f"Début de l'appel (extrait brut) :\n{joined[:_EDGE_CHARS]}\n\nFin de l'appel (extrait brut) :\n{joined[-_EDGE_CHARS:]}\n\n"
     payload = [{"t": _mmss(n.t_sec), "t_sec": n.t_sec, "qui": n.speaker, "type": n.kind, "citation": n.quote, "note": n.comment} for n in selected]
     for _ in range(4):  # si la requête dépasse le plafond, on garde moins de notes
         try:
-            debrief = _call(_REDUCE_SYSTEM, "Notes de l'appel (JSON) :\n" + json.dumps(payload, ensure_ascii=False), CloserDebrief, 2600)
+            debrief = _call(_REDUCE_SYSTEM, edges + "Notes de l'appel (JSON) :\n" + json.dumps(payload, ensure_ascii=False), CloserDebrief, 2600)
             break
         except Exception as exc:
             if "too large" in str(exc).lower() and len(payload) > 12:

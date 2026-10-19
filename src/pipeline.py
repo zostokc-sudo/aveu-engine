@@ -4,7 +4,7 @@ import argparse
 from pathlib import Path
 
 from audio_analysis import analyze_audio
-from debrief import build_debrief
+from debrief import NotASalesCall, build_debrief
 from conversation import conversation_metrics, transcript_lines
 from diarize import diarize, filmed_speaker, label_segments
 from extract_audio import extract_audio, normalize_video, probe_duration
@@ -79,12 +79,17 @@ def run(video_path: Path, subject_name: str, context: str) -> Path:
         behavior_profile = compute_behavior_profile(buckets)
 
     print("[6/7] Débrief du closer (texte)…")
-    debrief = None
+    debrief, not_sales = None, None
     try:
         debrief = build_debrief(segments, roles_inferred=not roles_known)
+    except NotASalesCall as exc:
+        not_sales = str(exc)
+        print(f"Débrief non applicable : {exc}")
     except Exception as exc:  # le débrief est un plus quand le rapport visuel existe ; sinon on le dit clairement
         print(f"Débrief indisponible : {exc!r}")
     if report is None and debrief is None:
+        if not_sales:
+            raise NoUsableContent(not_sales + " Envoyez l'enregistrement d'un appel entre un vendeur et un prospect.")
         raise NoUsableContent("Ni visage exploitable ni texte suffisant : impossible de produire un rapport (enregistrement trop court ou sans parole ?).")
 
     transcript, convo = transcript_lines(segments), conversation_metrics(segments)
