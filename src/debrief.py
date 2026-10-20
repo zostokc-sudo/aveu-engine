@@ -19,6 +19,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from groq_llm import DailyLimitReached
 from groq_llm import parse as llm_parse
 
 DIMENSIONS = [
@@ -228,6 +229,8 @@ def _call(system: str, user: str, model_cls, max_tokens: int):
     for attempt in range(5):
         try:
             return llm_parse(system=system, user=user, output_format=model_cls, max_tokens=max_tokens)
+        except DailyLimitReached:
+            raise  # plafond du jour : inutile d'attendre, l'audit sera remis en file
         except Exception as exc:
             last = exc
             if _is_rate_limit(exc) and attempt < 4:
@@ -254,6 +257,8 @@ def collect_notes(segments, progress=print) -> list[Note]:
             result = _call(_MAP_SYSTEM, "Tranche de transcription :\n\n" + chunk, ChunkNotes, 1800)
             notes.extend(result.notes)
             votes.append(result.is_sales_conversation)
+        except DailyLimitReached:
+            raise
         except Exception as exc:
             print(f"Débrief : tranche {i + 1} ignorée ({exc!r})", file=sys.stderr)
         if i < len(chunks) - 1:

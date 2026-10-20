@@ -7,6 +7,7 @@ from pathlib import Path
 
 from audio_analysis import analyze_audio
 from debrief import NotASalesCall, build_debrief
+from groq_llm import DailyLimitReached
 from conversation import conversation_metrics, transcript_lines
 from delivery import delivery_metrics
 from image_env import analyze_image
@@ -96,6 +97,8 @@ def run(video_path: Path, subject_name: str, context: str, source_url: str | Non
     debrief, not_sales = None, None
     try:
         debrief = build_debrief(segments, roles_inferred=not roles_known, focus=focus)
+    except DailyLimitReached:
+        raise  # le worker remet l'audit en file pour demain
     except NotASalesCall as exc:
         not_sales = str(exc)
         print(f"Débrief non applicable : {exc}")

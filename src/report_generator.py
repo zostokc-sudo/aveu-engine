@@ -31,6 +31,7 @@ import sys
 from pathlib import Path
 
 from audio_analysis import AudioBucketSignals
+from groq_llm import DailyLimitReached
 from groq_llm import parse as llm_parse
 from quality_check import precall_quality_warnings, quality_warnings
 from schema import BehaviorReport, PreCallBrief
@@ -359,6 +360,8 @@ def generate_report(
                 max_tokens=out_tokens,
             )
             break
+        except DailyLimitReached:
+            raise
         except Exception as exc:  # le plafond gratuit de Groq se règle en réduisant la requête, pas en échouant
             msg = str(exc)
             limits = re.search(r"Limit (\d+), Requested (\d+)", msg)

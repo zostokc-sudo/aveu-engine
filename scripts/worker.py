@@ -17,6 +17,7 @@ from pathlib import Path
 import requests
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+from groq_llm import DailyLimitReached  # noqa: E402
 from pipeline import MultipleFacesDetected, NoFaceDetected, NoUsableContent, run  # noqa: E402
 
 URL = os.environ["SUPABASE_URL"].rstrip("/")
@@ -111,6 +112,7 @@ def process(a: dict) -> None:
         print("audit déjà pris par un autre passage :", audit_id)
         return
     tee = Tee(audit_id, sys.stdout)
+    keep_video = False  # vrai quand l'audit est remis en file : la vidéo doit rester pour la reprise
     tmp = Path(tempfile.mkdtemp())
     video = tmp / f"{audit_id}{Path(a['video_path']).suffix or '.mp4'}"
     try:
@@ -135,6 +137,12 @@ def process(a: dict) -> None:
         )
         up.raise_for_status()
         patch(audit_id, status="done", report_path=report_path, progress=None)
+    except DailyLimitReached:
+        # capacité gratuite du jour épuisée : l'audit reste en file et sera repris plus tard (pas d'erreur côté client)
+        tee.write("Capacité gratuite du jour atteinte : audit remis en file.\n")
+        safe_patch(audit_id, status="queued", progress="En attente : capacité gratuite du jour atteinte, reprise automatique", started_at=None)
+        keep_video = True
+        raise
     except (MultipleFacesDetected, NoFaceDetected, NoUsableContent) as exc:
         safe_patch(audit_id, status="error", error=str(exc)[:300], progress=None)
     except Exception as exc:  # message court côté client ; le détail va dans le journal de l'audit et dans les logs Actions
@@ -142,7 +150,7 @@ def process(a: dict) -> None:
         safe_patch(audit_id, status="error", error="L'analyse a échoué. Réessayez avec une autre vidéo.", progress=None)
     finally:
         save_log(audit_id, tee.text())
-        for part in part_paths(a):  # on ne garde pas la vidéo
+        for part in ([] if keep_video else part_paths(a)):  # on ne garde pas la vidéo (sauf audit remis en file)
             try:
                 requests.delete(f"{URL}/storage/v1/object/videos/{part}", headers=H, timeout=30)
             except requests.RequestException as exc:
@@ -173,6 +181,9 @@ def main() -> None:
             time.sleep(60)  # plafond gratuit Groq par minute : on laisse la fenêtre se vider entre deux audits
         try:
             process(a)
+        except DailyLimitReached:
+            print("Plafond gratuit atteint : on s'arrête, la file reprendra au prochain passage.")
+            break
         except Exception as exc:  # un audit en échec ne doit pas empêcher les suivants
             print("échec inattendu sur", a.get("id"), repr(exc), file=sys.stderr)
 

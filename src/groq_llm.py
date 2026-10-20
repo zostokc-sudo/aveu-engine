@@ -29,6 +29,33 @@ load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 MODEL = "openai/gpt-oss-120b"
 
 _client: OpenAI | None = None
+_exhausted: set[str] = set()  # fournisseurs dont le plafond QUOTIDIEN gratuit est atteint (pour la durée du processus)
+
+
+class DailyLimitReached(RuntimeError):
+    """Tous les fournisseurs gratuits ont atteint leur plafond du jour : l'audit doit attendre, pas échouer."""
+
+
+def _is_daily(exc: Exception) -> bool:
+    msg = str(exc).lower()
+    return "tokens per day" in msg or "(tpd)" in msg or "requests per day" in msg or "(rpd)" in msg
+
+
+def _providers() -> list[tuple[str, str, str, str]]:
+    """(nom, url, clé, modèle) par ordre de préférence. Chaque fournisseur/modèle a son propre plafond quotidien gratuit :
+    quand l'un est épuisé, on passe au suivant au lieu d'échouer."""
+    out = []
+    if os.environ.get("CEREBRAS_API_KEY"):
+        out.append(("cerebras", "https://api.cerebras.ai/v1", os.environ["CEREBRAS_API_KEY"], "gpt-oss-120b"))
+    key = os.environ.get("GROQ_API_KEY")
+    if key:
+        out.append(("groq-120b", "https://api.groq.com/openai/v1", key, MODEL))
+        out.append(("groq-20b", "https://api.groq.com/openai/v1", key, "openai/gpt-oss-20b"))
+    return out
+
+
+def _make_client(base_url: str, api_key: str) -> OpenAI:
+    return OpenAI(base_url=base_url, api_key=api_key)
 
 
 def _get_client() -> OpenAI:
@@ -94,13 +121,25 @@ def parse(system: str, user: str, output_format: type[BaseModel], max_tokens: in
     # succès immédiat sur un appel identique) — une retentative absorbe ce
     # raté avant de céder la place au modèle local, nettement moins bon.
     last_error: Exception | None = None
-    for _ in range(2):
-        try:
-            response = client.chat.completions.create(
-                model=MODEL, max_tokens=max_tokens, messages=messages, response_format=schema,
-                reasoning_effort="low",  # moins de tokens de réflexion = rapport complet dans le budget gratuit
-            )
-            return output_format.model_validate_json(response.choices[0].message.content)
-        except Exception as e:
-            last_error = e
+    providers = _providers()
+    if not providers:
+        raise RuntimeError("Aucune clé d'IA (GROQ_API_KEY) configurée.")
+    for name, base_url, api_key, model in providers:
+        if name in _exhausted:
+            continue
+        client = _make_client(base_url, api_key)
+        for _ in range(2):
+            try:
+                response = client.chat.completions.create(
+                    model=model, max_tokens=max_tokens, messages=messages, response_format=schema,
+                    reasoning_effort="low",  # moins de tokens de réflexion = rapport complet dans le budget gratuit
+                )
+                return output_format.model_validate_json(response.choices[0].message.content)
+            except Exception as e:
+                last_error = e
+                if _is_daily(e):
+                    _exhausted.add(name)
+                    break  # plafond du jour atteint : on passe au fournisseur suivant
+    if last_error is not None and all(p[0] in _exhausted for p in providers):
+        raise DailyLimitReached(str(last_error)[:300])
     raise last_error
