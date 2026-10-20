@@ -25,6 +25,11 @@ def _build_radar_data(report: BehaviorReport, behavior_profile: dict[str, float]
     return build_radar(axes)
 
 
+def safe_url(url: str | None) -> str | None:
+    """Seuls les liens http(s) sont affichés (jamais javascript: ou data:)."""
+    return url if url and url.lower().startswith(("http://", "https://")) and len(url) <= 300 else None
+
+
 _RING_R = 38
 _RING_C = 2 * 3.141592653589793 * _RING_R
 
@@ -47,6 +52,7 @@ def debrief_view(debrief: dict | None) -> dict | None:
 def render_debrief_only(
     debrief: dict, out_path: Path, subject_name: str, context: str, duration_min: float,
     visual_note: str = "", transcript: list[dict] | None = None, convo: dict | None = None,
+    source_url: str | None = None, source_title: str | None = None,
 ) -> Path:
     """Rapport « débrief du closer » seul : utilisé quand l'analyse du visage n'est pas possible
     (pas de visage exploitable, plusieurs visages, audio seul)."""
@@ -55,6 +61,7 @@ def render_debrief_only(
         debrief=debrief_view(debrief), subject_name=subject_name, context=context,
         duration_min=round(duration_min, 1), generated_date=date.today().isoformat(),
         visual_note=visual_note, transcript=transcript or [], convo=convo,
+        source_url=safe_url(source_url), source_title=source_title,
     )
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(html, encoding="utf-8")
@@ -71,6 +78,8 @@ def render_html(
     transcript: list[dict] | None = None,
     convo: dict | None = None,
     debrief: dict | None = None,
+    source_url: str | None = None,
+    source_title: str | None = None,
 ) -> Path:
     behavior_profile = behavior_profile or {}
     env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)), autoescape=select_autoescape(["html"]))
@@ -86,6 +95,7 @@ def render_html(
         transcript=transcript or [],
         convo=convo,
         debrief=debrief_view(debrief),
+        source_url=safe_url(source_url), source_title=source_title,
     )
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(html, encoding="utf-8")

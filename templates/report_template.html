@@ -188,6 +188,7 @@
     <div class="eyebrow">Aveu — analyse comportementale — confidentiel</div>
     <h1>{{ subject_name }}</h1>
     <div class="meta">{{ context }} · durée analysée {{ duration_min }} min · généré le {{ generated_date }}</div>
+    {% if source_url %}<div class="meta" style="margin-top:8px">🎬 Vidéo analysée : <a href="{{ source_url }}" target="_blank" rel="noopener" style="color:#D9C39A">{{ source_title or source_url }}</a></div>{% endif %}
   </div>
 
   <div class="container">

@@ -42,7 +42,7 @@ def process(a: dict) -> None:
                     r.raise_for_status()
                     for chunk in r.iter_content(1 << 20):
                         f.write(chunk)
-        report = run(video, a["subject"], a["context"] or "appel de vente (interlocuteur externe)")
+        report = run(video, a["subject"], a["context"] or "appel de vente (interlocuteur externe)", a.get("source_url"))
         report_path = f"{a['user_id']}/{audit_id}.html"
         up = requests.post(
             f"{URL}/storage/v1/object/reports/{report_path}",

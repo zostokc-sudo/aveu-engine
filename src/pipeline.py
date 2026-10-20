@@ -35,7 +35,7 @@ def _no_face_note(reason: str) -> str:
             "ce rapport porte uniquement sur ce que vous avez dit et fait, d'après la transcription.")
 
 
-def run(video_path: Path, subject_name: str, context: str) -> Path:
+def run(video_path: Path, subject_name: str, context: str, source_url: str | None = None) -> Path:
     stem = video_path.stem
     run_dir = WORK_DIR / stem
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -98,11 +98,13 @@ def run(video_path: Path, subject_name: str, context: str) -> Path:
         html_path = render_html(
             report, run_dir / "report.html", subject_name=subject_name, context=context, duration_min=duration / 60,
             behavior_profile=behavior_profile, transcript=transcript, convo=convo, debrief=debrief,
+            source_url=source_url, source_title=subject_name,
         )
     else:
         html_path = render_debrief_only(
             debrief, run_dir / "report.html", subject_name=subject_name, context=context, duration_min=duration / 60,
             visual_note=visual_note, transcript=transcript, convo=convo,
+            source_url=source_url, source_title=subject_name,
         )
     try:
         render_pdf(html_path)
