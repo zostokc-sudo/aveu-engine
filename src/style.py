@@ -55,6 +55,7 @@ copiées MOT POUR MOT des lignes du prospect. Réponds en français."""
 def build_style(segments, roles_known: bool) -> dict | None:
     mine = [s for s in segments if s.text.strip() and (not roles_known or s.speaker == "filmed")]
     if sum(len(s.text) for s in mine) < 500:
+        print("Style du prospect : texte du prospect insuffisant.")
         return None
     step = max(1, len(mine) // 40)  # échantillon réparti sur tout l'appel
     sample = mine[::step][:40]
@@ -62,9 +63,11 @@ def build_style(segments, roles_known: bool) -> dict | None:
     who = "Lignes du prospect" if roles_known else "Transcription (le prospect est celui qui répond aux questions et exprime un besoin)"
     result = _call(_SYSTEM, f"{who} :\n\n{lines}", StyleProfile, 900)
     if result.dominant == "indetermine":
+        print("Style du prospect : le texte ne permet pas de trancher.")
         return None
     evidence = [e for e in result.evidence if quote_is_grounded(e.quote, e.t_sec, segments)][:3]
     if not evidence:
+        print("Style du prospect : aucune citation retrouvée dans la transcription, profil écarté.")
         return None
     info = STYLES[result.dominant]
     second = STYLES.get(result.secondary)
