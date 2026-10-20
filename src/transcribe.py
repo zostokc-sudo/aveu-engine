@@ -45,7 +45,7 @@ def _transcribe_cpu(wav_path: Path) -> list[Segment]:
     with wave.open(str(wav_path), "rb") as w:
         audio = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16).astype(np.float32) / 32768.0
     model = WhisperModel("small", device="cpu", compute_type="int8")
-    raw, _ = model.transcribe(audio, word_timestamps=True)
+    raw, _ = model.transcribe(audio, word_timestamps=True, beam_size=2, vad_filter=True, condition_on_previous_text=False)  # plus rapide ; le VAD saute les silences (et évite les phrases fantômes)
     return [
         Segment(
             text=seg.text.strip(), start=seg.start, end=seg.end,

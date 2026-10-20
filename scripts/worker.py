@@ -89,6 +89,9 @@ def save_log(audit_id: str, log: str) -> None:
 
 def process(a: dict) -> None:
     audit_id = a["id"]
+    if not str(a.get("video_path", "")).startswith(f"{a['user_id']}/") or ".." in a["video_path"]:
+        patch(audit_id, status="error", error="Chemin de vidéo invalide.")  # défense en plus de la règle de la base
+        return
     patch(audit_id, status="running", progress="Démarrage…")
     tee = Tee(audit_id, sys.stdout)
     tmp = Path(tempfile.mkdtemp())
