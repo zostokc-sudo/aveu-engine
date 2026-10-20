@@ -88,9 +88,10 @@ def filmed_speaker(turns: list[Turn], buckets) -> int | None:
     return best
 
 
-def label_segments(segments, turns: list[Turn], filmed: int | None) -> bool:
-    """Étiquette chaque segment 'filmed' (la personne à l'écran) ou 'other' (son interlocuteur).
-    Renvoie True si l'étiquetage a eu lieu."""
+def label_segments(segments, turns: list[Turn], filmed: int | None, filmed_role: str = "prospect") -> bool:
+    """Étiquette chaque segment par RÔLE : 'filmed' = le prospect, 'other' = le closer (noms historiques).
+    Si la personne à l'écran est le prospect (cas normal), son locuteur reçoit 'filmed' ; si c'est le closer
+    (auto-évaluation), son locuteur reçoit 'other'. Renvoie True si l'étiquetage a eu lieu."""
     if filmed is None or not turns:
         return False
     for seg in segments:
@@ -102,5 +103,7 @@ def label_segments(segments, turns: list[Turn], filmed: int | None) -> bool:
         if not per_speaker:
             seg.speaker = None
             continue
-        seg.speaker = "filmed" if max(per_speaker, key=per_speaker.get) == filmed else "other"
+        is_screen_person = max(per_speaker, key=per_speaker.get) == filmed
+        prospect_side = is_screen_person if filmed_role == "prospect" else not is_screen_person
+        seg.speaker = "filmed" if prospect_side else "other"
     return True

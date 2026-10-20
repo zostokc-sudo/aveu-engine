@@ -1,11 +1,15 @@
 """Orchestrateur : vidéo -> transcription + signaux comportementaux -> rapport HTML."""
 
 import argparse
+import time
 from pathlib import Path
 
 from audio_analysis import analyze_audio
 from debrief import NotASalesCall, build_debrief
 from conversation import conversation_metrics, transcript_lines
+from delivery import delivery_metrics
+from image_env import analyze_image
+from style import build_style
 from diarize import diarize, filmed_speaker, label_segments
 from extract_audio import extract_audio, normalize_video, probe_duration
 from html_report import render_debrief_only, render_html, render_pdf
@@ -35,7 +39,10 @@ def _no_face_note(reason: str) -> str:
             "ce rapport porte uniquement sur ce que vous avez dit et fait, d'après la transcription.")
 
 
-def run(video_path: Path, subject_name: str, context: str, source_url: str | None = None) -> Path:
+def run(video_path: Path, subject_name: str, context: str, source_url: str | None = None,
+        filmed_role: str = "prospect", focus: tuple | list = (), analyze_my_image: bool = False) -> Path:
+    """filmed_role : 'prospect' (cas normal : jauges de réactions sur le prospect) ou 'closer' (auto-évaluation : pas
+    d'analyse de réactions du visage, seulement le texte, la voix, le vocabulaire et, si demandé, l'image/le décor)."""
     stem = video_path.stem
     run_dir = WORK_DIR / stem
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -64,15 +71,18 @@ def run(video_path: Path, subject_name: str, context: str, source_url: str | Non
 
         print("[4/7] Analyse visuelle (visage + posture)…")
         buckets = bucketize(analyze_video(norm_path))
-        warning = check_multi_face_warning(buckets)
+        warning = check_multi_face_warning(buckets) if filmed_role == "prospect" else None
         if warning:
             visual_ok, visual_note = False, _no_face_note("Plusieurs visages apparaissent à l'écran en même temps : impossible de suivre la même personne sans risque de confusion.")
 
     turns = diarize(wav_path)
-    roles_known = label_segments(segments, turns, filmed_speaker(turns, buckets) if visual_ok else None)
+    roles_known = label_segments(segments, turns, filmed_speaker(turns, buckets) if visual_ok else None, filmed_role)
     print("Voix séparées : la personne filmée est identifiée." if roles_known else "Voix non étiquetées : les rôles seront déduits du texte.")
 
-    if visual_ok:
+    if visual_ok and filmed_role == "closer":
+        visual_note = ("Vous êtes à l'écran : par principe, Aveu n'analyse pas vos expressions du visage. "
+                       "Ce rapport porte sur vos mots, votre voix et, si vous l'avez demandé, votre image.")
+    if visual_ok and filmed_role == "prospect":
         print("[5/7] Rapport sur les réactions du prospect…")
         report = generate_report(segments, buckets, context=context, audio_buckets=audio_buckets)
         save_report_json(report, run_dir / "report.json")
@@ -81,7 +91,7 @@ def run(video_path: Path, subject_name: str, context: str, source_url: str | Non
     print("[6/7] Débrief du closer (texte)…")
     debrief, not_sales = None, None
     try:
-        debrief = build_debrief(segments, roles_inferred=not roles_known)
+        debrief = build_debrief(segments, roles_inferred=not roles_known, focus=focus)
     except NotASalesCall as exc:
         not_sales = str(exc)
         print(f"Débrief non applicable : {exc}")
@@ -92,19 +102,33 @@ def run(video_path: Path, subject_name: str, context: str, source_url: str | Non
             raise NoUsableContent(not_sales + " Envoyez l'enregistrement d'un appel entre un vendeur et un prospect.")
         raise NoUsableContent("Ni visage exploitable ni texte suffisant : impossible de produire un rapport (enregistrement trop court ou sans parole ?).")
 
+    extras = {"focus": list(focus)}
+    extras["delivery"] = delivery_metrics(segments) if roles_known else None
+    try:
+        if debrief is not None:
+            time.sleep(40)  # plafond gratuit Groq par minute : on laisse la fenêtre se vider après le débrief
+        extras["style"] = build_style(segments, roles_known) if debrief is not None else None
+    except Exception as exc:  # le style du prospect est un plus : jamais bloquant
+        print(f"Style du prospect indisponible : {exc!r}")
+    if analyze_my_image and filmed_role == "closer" and visual_ok:
+        try:
+            extras["image_env"] = analyze_image(norm_path, duration)
+        except Exception as exc:
+            print(f"Image indisponible : {exc!r}")
+
     transcript, convo = transcript_lines(segments), conversation_metrics(segments)
     print("[7/7] Rendu du rapport…")
     if report is not None:
         html_path = render_html(
             report, run_dir / "report.html", subject_name=subject_name, context=context, duration_min=duration / 60,
             behavior_profile=behavior_profile, transcript=transcript, convo=convo, debrief=debrief,
-            source_url=source_url, source_title=subject_name,
+            source_url=source_url, source_title=subject_name, extras=extras,
         )
     else:
         html_path = render_debrief_only(
             debrief, run_dir / "report.html", subject_name=subject_name, context=context, duration_min=duration / 60,
             visual_note=visual_note, transcript=transcript, convo=convo,
-            source_url=source_url, source_title=subject_name,
+            source_url=source_url, source_title=subject_name, extras=extras,
         )
     try:
         render_pdf(html_path)

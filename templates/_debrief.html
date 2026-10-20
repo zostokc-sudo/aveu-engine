@@ -34,10 +34,9 @@
     {% endfor %}
   </div>
 
-  <h2 style="margin-top:34px">Les 6 étapes de votre appel</h2>
-  <div class="db-grid">
-    {% for d in debrief.cards %}
-    <div class="db-card">
+  {% macro card(d) %}
+    <div class="db-card" {% if d.focus %}style="border:3px solid #b8934f"{% endif %}>
+      {% if d.focus %}<div class="pill" style="background:#b8934f;color:#fff;margin-bottom:10px;display:inline-block;padding:3px 12px;border-radius:999px;font-size:12.5px;font-weight:700">🎯 Votre focus</div>{% endif %}
       <div class="db-head">
         <svg viewBox="0 0 100 100" aria-hidden="true">
           <circle cx="50" cy="50" r="38" fill="none" stroke="{{ d.soft }}" stroke-width="11"/>
@@ -50,8 +49,15 @@
       {% if d.quote %}<div class="db-quote">« {{ d.quote }} » <small>{{ d.at }}</small></div>{% endif %}
       <div class="db-say"><b>À dire plutôt, la prochaine fois</b>{{ d.improvement }}</div>
     </div>
-    {% endfor %}
-  </div>
+  {% endmacro %}
+  {% set focus_cards = debrief.cards | selectattr('focus') | list %}
+  {% set other_cards = debrief.cards | rejectattr('focus') | list %}
+  {% if focus_cards %}
+  <h2 style="margin-top:34px">🎯 Votre focus du jour : {{ debrief.focus_labels | join(', ') }}</h2>
+  <div class="db-grid">{% for d in focus_cards %}{{ card(d) }}{% endfor %}</div>
+  {% endif %}
+  <h2 style="margin-top:34px">{{ 'Les autres étapes de votre appel' if focus_cards else 'Les 6 étapes de votre appel' }}</h2>
+  <div class="db-grid">{% for d in other_cards %}{{ card(d) }}{% endfor %}</div>
 
   {% if debrief.strengths %}
   <h2 style="margin-top:34px">Ce qui a bien marché</h2>

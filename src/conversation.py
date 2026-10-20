@@ -14,7 +14,7 @@ def _is_question(text: str) -> bool:
 
 def transcript_lines(segments) -> list[dict]:
     """Transcription complète, étiquetée quand les voix sont séparées."""
-    names = {"filmed": "Prospect (à l'écran)", "other": "Interlocuteur"}
+    names = {"filmed": "Prospect", "other": "Closer"}
     return [
         {"t": int(s.start), "who": names.get(s.speaker, ""), "text": s.text}
         for s in segments if s.text.strip()

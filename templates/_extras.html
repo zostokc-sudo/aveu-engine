@@ -1,0 +1,54 @@
+<style>
+  .ex-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin-top: 16px; }
+  .ex-stat { background: var(--card); border-radius: 22px; padding: 18px; box-shadow: 0 4px 16px rgba(60,50,30,.07); text-align: center; }
+  .ex-stat b { display: block; font-size: 34px; font-family: var(--font-mono); }
+  .ex-stat span { display: block; font-size: 14px; color: var(--muted); margin-top: 2px; }
+  .ex-stat .tag { display: inline-block; margin-top: 8px; padding: 3px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 700; background: #f1ebdc; color: #5b4a1d; }
+  .ex-card { background: var(--card); border-radius: 26px; padding: 22px 26px; box-shadow: 0 6px 24px rgba(60,50,30,.07); margin-top: 16px; font-size: 15.5px; }
+  .ex-card ul { margin: 8px 0 0; padding-left: 20px; } .ex-card li { margin-bottom: 6px; }
+  .ex-chk { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: 18px; margin-top: 10px; font-size: 15px; }
+  .ex-chk.ok { background: #e8f3ec; color: #1e5a38; } .ex-chk.no { background: #fff3e0; color: #7a4a05; }
+  .ex-focus { border: 3px solid #b8934f; }
+</style>
+{% if extras and extras.delivery %}{% set d = extras.delivery %}
+<section>
+  <h2>🎙️ Votre voix et vos mots (des faits de langage, pas des émotions){% if 'voice' in extras.focus or 'vocabulary' in extras.focus %} — 🎯 votre focus{% endif %}</h2>
+  <div class="ex-grid">
+    <div class="ex-stat"><b>{{ d.wpm }}</b><span>mots par minute</span><span class="tag">{{ d.wpm_label }}</span></div>
+    <div class="ex-stat"><b>{{ d.fillers_per_min }}</b><span>mots de remplissage / min</span><span class="tag">{{ d.fillers_label }}</span></div>
+    <div class="ex-stat"><b>{{ d.soft_per_10min }}</b><span>mots « mous » / 10 min</span><span class="tag">{{ d.soft_label }}</span></div>
+    <div class="ex-stat"><b>{{ d.challenge_pct }} %</b><span>de vos questions challengent</span><span class="tag">{{ d.challenge_label }}</span></div>
+  </div>
+  <div class="ex-card {{ 'ex-focus' if ('voice' in extras.focus or 'vocabulary' in extras.focus) }}">
+    <ul>
+      <li><b>Rythme.</b> {{ d.wpm_advice }}{% if d.long_pauses %} Vous avez fait {{ d.long_pauses }} pause(s) de plus d'1,5 s.{% endif %}</li>
+      <li><b>Vocabulaire.</b> {{ d.soft_advice }}</li>
+      <li><b>Challenge.</b> {{ d.challenge_advice }}</li>
+      {% if d.fillers_top %}<li><b>Tics de langage les plus fréquents :</b> {% for w, n in d.fillers_top %}« {{ w }} » ({{ n }}×){% if not loop.last %}, {% endif %}{% endfor %}.</li>{% endif %}
+    </ul>
+    {% if d.soft_examples %}<p style="margin:10px 0 0;color:var(--muted);font-size:14px">Exemples dans votre appel :</p><ul>{% for e in d.soft_examples %}<li><i>« {{ e.text }} »</i> <small style="color:var(--muted)">{{ e.at }}</small></li>{% endfor %}</ul>{% endif %}
+  </div>
+</section>
+{% endif %}
+{% if extras and extras.style %}{% set st = extras.style %}
+<section>
+  <h2>{{ st.emoji }} Style de communication du prospect</h2>
+  <div class="ex-card">
+    <p style="margin:0 0 6px;font-size:19px"><b>{{ st.label }}</b>{% if st.secondary_label %} <span style="color:var(--muted);font-size:15px">· aussi : {{ st.secondary_label }}</span>{% endif %}</p>
+    <p style="margin:0">{{ st.why }} <span style="color:var(--muted)">(confiance {{ st.confidence }})</span></p>
+    <ul style="margin-top:12px">{% for t in st.tips %}<li>{{ t }}</li>{% endfor %}</ul>
+    {% for e in st.evidence %}<div class="db-quote">« {{ e.quote }} » <small>{{ e.at }}</small></div>{% endfor %}
+    <p style="margin:12px 0 0;color:var(--muted);font-size:13px">Tendance observée dans cet échange seulement, d'après les mots du prospect : un repère pour s'adapter, pas un diagnostic de personnalité (ce modèle à quatre couleurs a une validité scientifique limitée).</p>
+  </div>
+</section>
+{% endif %}
+{% if extras and extras.image_env %}{% set im = extras.image_env %}
+<section>
+  <h2>🎥 Votre image et votre environnement{% if 'image' in extras.focus %} — 🎯 votre focus{% endif %}</h2>
+  <div class="ex-card {{ 'ex-focus' if 'image' in extras.focus }}">
+    <p style="margin:0">{{ im.ok_count }} point(s) sur {{ im.total }} déjà bons. Cinq réglages techniques que vous pouvez corriger en cinq minutes :</p>
+    {% for c in im.checks %}<div class="ex-chk {{ 'ok' if c.ok else 'no' }}"><span>{{ '✅' if c.ok else '🔧' }}</span><span><b>{{ c.label }}.</b> {{ c.text }}</span></div>{% endfor %}
+    <p style="margin:12px 0 0;color:var(--muted);font-size:13px">Cette analyse ne porte que sur la lumière, le cadrage, la netteté et le fond. Elle ne juge jamais le physique, l'âge ni les vêtements.</p>
+  </div>
+</section>
+{% endif %}

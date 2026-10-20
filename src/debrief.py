@@ -98,6 +98,15 @@ Dimensions à noter dans cet ordre : opening (ouverture), discovery (découverte
 proposal (proposition), closing (conclusion). Le score mesure la qualité d'exécution de l'étape, pas la chance de signer. \
 Si une étape est absente de l'appel, note-la bas et dis-le.
 
+GRILLE DE MÉTHODE (appuie ton jugement dessus, sans jargon ni noms de méthodes dans le texte) :
+- Ouverture : cadre posé (objectif, durée, déroulé), intro courte et professionnelle, le prospect parle vite.
+- Découverte : questions ouvertes, creuser la situation, le problème, ses CONSÉQUENCES (« que se passe-t-il si rien ne change ? »), « pourquoi maintenant ? » ; idéalement la majorité de l'appel.
+- Écoute : le prospect parle plus que le closer, reformulations, relances sur ses mots.
+- Objections : les anticiper tôt, les écouter, les reconnaître, les explorer AVANT de répondre ; ne pas les esquiver ni parler d'argent à contrecœur.
+- Proposition : relier l'offre au problème et au résultat voulu par le prospect (pas lister des fonctionnalités) ; annoncer le prix puis une question ouverte.
+- Conclusion : récapituler avec ses mots, demander clairement la décision, fixer une prochaine étape DATÉE (idéalement paiement ou rendez-vous immédiat).
+Ne recommande jamais la culpabilisation, l'humiliation, la fausse urgence ni la pression sur la famille du prospect.
+
 RÈGLES STRICTES :
 - evidence_quote, quote et prospect_said : copiés TELS QUELS depuis les notes, sinon chaîne vide.
 - improvement et better_move : une vraie phrase que le closer peut dire, naturelle, en français, adaptée à CET appel.
@@ -120,7 +129,7 @@ def _mmss(t: float) -> str:
 
 
 def transcript_text_lines(segments) -> list[tuple[float, str]]:
-    labels = {"other": "Closer", "filmed": "Prospect"}
+    labels = {"other": "Closer", "filmed": "Prospect"}  # rôles : "filmed" = prospect, "other" = closer
     out = []
     for s in segments:
         if not s.text.strip():
@@ -203,7 +212,7 @@ def _select_notes(notes: list[Note], limit: int = _MAX_NOTES_REDUCE) -> list[Not
     return sorted(ranked, key=lambda n: n.t_sec)
 
 
-def build_debrief(segments, roles_inferred: bool, progress=print) -> dict | None:
+def build_debrief(segments, roles_inferred: bool, progress=print, focus=()) -> dict | None:
     """Renvoie le débrief (dict prêt pour le gabarit) ou None si le texte est trop pauvre."""
     if sum(len(s.text) for s in segments) < 600:
         return None
@@ -216,20 +225,26 @@ def build_debrief(segments, roles_inferred: bool, progress=print) -> dict | None
     lines = [line for _, line in transcript_text_lines(segments)]
     joined = "\n".join(lines)
     edges = f"Début de l'appel (extrait brut) :\n{joined[:_EDGE_CHARS]}\n\nFin de l'appel (extrait brut) :\n{joined[-_EDGE_CHARS:]}\n\n"
+    focus_keys = [k for k, _ in DIMENSIONS if k in set(focus)]
+    focus_note = ""
+    if focus_keys:
+        names = ", ".join(label for k, label in DIMENSIONS if k in focus_keys)
+        focus_note = (f"FOCUS DEMANDÉ par le closer : {names}. Pour ces étapes uniquement, 'improvement' contient DEUX formulations "
+                      "différentes séparées par « — ou — », et 'verdict' est plus précis (2 phrases). Les autres étapes restent brèves.\n\n")
     payload = [{"t": _mmss(n.t_sec), "t_sec": n.t_sec, "qui": n.speaker, "type": n.kind, "citation": n.quote, "note": n.comment} for n in selected]
     for _ in range(4):  # si la requête dépasse le plafond, on garde moins de notes
         try:
-            debrief = _call(_REDUCE_SYSTEM, edges + "Notes de l'appel (JSON) :\n" + json.dumps(payload, ensure_ascii=False), CloserDebrief, 2600)
+            debrief = _call(_REDUCE_SYSTEM, focus_note + edges + "Notes de l'appel (JSON) :\n" + json.dumps(payload, ensure_ascii=False), CloserDebrief, 2600)
             break
         except Exception as exc:
             if "too large" in str(exc).lower() and len(payload) > 12:
                 payload = payload[: int(len(payload) * 0.7)]
                 continue
             raise
-    return _sanitize(debrief, segments, roles_inferred)
+    return _sanitize(debrief, segments, roles_inferred, focus_keys)
 
 
-def _sanitize(d: CloserDebrief, segments, roles_inferred: bool) -> dict:
+def _sanitize(d: CloserDebrief, segments, roles_inferred: bool, focus_keys=()) -> dict:
     def ok(q: str, t: int) -> str:
         return q if q and quote_is_grounded(q, t, segments) else ""
 
@@ -242,7 +257,7 @@ def _sanitize(d: CloserDebrief, segments, roles_inferred: bool) -> dict:
         scorecard.append({
             "key": key, "label": label, "score": max(0, min(100, s.score)), "verdict": s.verdict,
             "quote": ok(s.evidence_quote, s.evidence_t_sec), "at": _mmss(s.evidence_t_sec) if s.evidence_t_sec else "",
-            "improvement": s.improvement,
+            "improvement": s.improvement, "focus": key in focus_keys,
         })
     return {
         "summary": d.summary,
@@ -254,4 +269,5 @@ def _sanitize(d: CloserDebrief, segments, roles_inferred: bool) -> dict:
         "next_step_secured": d.next_step_secured,
         "next_step_detail": d.next_step_detail,
         "roles_inferred": roles_inferred,
+        "focus_labels": [label for k, label in DIMENSIONS if k in focus_keys],
     }
