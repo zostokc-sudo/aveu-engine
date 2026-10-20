@@ -176,6 +176,28 @@ def quote_is_grounded(quote: str, t_sec: float, segments, window: float = 150.0,
     return sum(b in big_n for b in big_q) / len(big_q) >= 0.4
 
 
+def locate_quote(quote: str, segments, speaker: str | None = None, threshold: float = 0.7) -> float | None:
+    """Cherche la citation dans toute la transcription (le modèle se trompe souvent de seconde) et renvoie le début
+    du passage où elle se trouve vraiment, ou None si elle n'existe pas. Mêmes exigences que quote_is_grounded."""
+    q = _tokens(quote)
+    if len(q) < 2:
+        return None
+    sig = {w for w in q if len(w) > 2 and w not in _STOP} or set(q)
+    big_q = list(zip(q, q[1:]))
+    cands = [s for s in segments if (speaker is None or s.speaker == speaker) and s.text.strip()]
+    best, best_score = None, 0.0
+    for i, seg in enumerate(cands):
+        for text, start in ((seg.text, seg.start), (seg.text + " " + cands[i + 1].text if i + 1 < len(cands) else seg.text, seg.start)):
+            near = _tokens(text)
+            if len(sig & set(near)) / len(sig) < threshold:
+                continue
+            big_n = set(zip(near, near[1:]))
+            ratio = sum(b in big_n for b in big_q) / len(big_q)
+            if ratio >= 0.4 and ratio > best_score:
+                best, best_score = start, ratio
+    return best
+
+
 def _is_rate_limit(exc: Exception) -> bool:
     msg = str(exc).lower()
     return getattr(exc, "status_code", None) == 429 or "rate_limit" in msg or "rate limit" in msg or "request too large" in msg
@@ -219,7 +241,13 @@ def collect_notes(segments, progress=print) -> list[Note]:
             time.sleep(_SLEEP_BETWEEN_CALLS)
     if votes and sum(votes) / len(votes) < 0.5:
         raise NotASalesCall("Cet enregistrement ne ressemble pas à un appel de vente (conférence, cours ou monologue).")
-    return [n for n in notes if quote_is_grounded(n.quote, n.t_sec, segments)]
+    kept = []
+    for n in notes:
+        at = locate_quote(n.quote, segments)
+        if at is not None:
+            n.t_sec = int(at)  # la seconde réelle remplace celle (souvent approximative) du modèle
+            kept.append(n)
+    return kept
 
 
 def _select_notes(notes: list[Note], limit: int = _MAX_NOTES_REDUCE) -> list[Note]:
@@ -280,8 +308,9 @@ def build_debrief(segments, roles_inferred: bool, progress=print, focus=()) -> d
 
 
 def _sanitize(d: CloserDebrief, segments, roles_inferred: bool, focus_keys=()) -> dict:
-    def ok(q: str, t: int) -> str:
-        return q if q and quote_is_grounded(q, t, segments) else ""
+    def ok(q: str, speaker: str | None = None) -> tuple[str, float | None]:
+        at = locate_quote(q, segments, speaker) if q else None
+        return (q, at) if at is not None else ("", None)
 
     by_key = {s.key: s for s in d.scorecard}
     scorecard = []
@@ -289,17 +318,27 @@ def _sanitize(d: CloserDebrief, segments, roles_inferred: bool, focus_keys=()) -
         s = by_key.get(key)
         if not s:
             continue
+        quote, at = ok(s.evidence_quote)
         scorecard.append({
             "key": key, "label": label, "score": max(0, min(100, s.score)), "verdict": s.verdict,
-            "quote": ok(s.evidence_quote, s.evidence_t_sec), "at": _mmss(s.evidence_t_sec) if s.evidence_t_sec else "",
+            "quote": quote, "at": _mmss(at) if at is not None else "",
             "improvement": s.improvement, "focus": key in focus_keys,
         })
+    strengths = []
+    for x in d.strengths:
+        quote, at = ok(x.quote)
+        if quote:
+            strengths.append({"at": _mmss(at), "quote": quote, "why": x.why})
+    missed = []
+    for x in d.missed:
+        said, at = ok(x.prospect_said)
+        if said:  # sans citation vérifiée, pas d'occasion manquée affichée
+            missed.append({"at": _mmss(at), "prospect_said": said, "closer_did": x.closer_did, "better_move": x.better_move})
     return {
         "summary": d.summary,
         "scorecard": scorecard,
-        "strengths": [{"at": _mmss(x.t_sec), "quote": ok(x.quote, x.t_sec), "why": x.why} for x in d.strengths if ok(x.quote, x.t_sec)][:3],
-        "missed": [{"at": _mmss(x.t_sec), "prospect_said": ok(x.prospect_said, x.t_sec), "closer_did": x.closer_did, "better_move": x.better_move}
-                   for x in d.missed if ok(x.prospect_said, x.t_sec)][:4],  # sans citation vérifiée, pas d'occasion manquée affichée
+        "strengths": strengths[:3],
+        "missed": missed[:4],
         "priorities": d.priorities[:3],
         "next_step_secured": d.next_step_secured,
         "next_step_detail": d.next_step_detail,

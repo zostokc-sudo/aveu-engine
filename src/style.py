@@ -9,7 +9,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from debrief import _call, quote_is_grounded
+from debrief import _call, locate_quote
 
 _Color = Literal["rouge", "jaune", "vert", "bleu", "indetermine"]
 
@@ -71,7 +71,12 @@ def build_style(segments, roles_known: bool) -> dict | None:
     if result.dominant == "indetermine":
         print("Style du prospect : le texte ne permet pas de trancher.")
         return None
-    evidence = [e for e in result.evidence if quote_is_grounded(e.quote, e.t_sec, segments, speaker='filmed' if roles_known else None)][:3]
+    evidence = []
+    for e in result.evidence:
+        at = locate_quote(e.quote, segments, speaker="filmed" if roles_known else None)
+        if at is not None:
+            evidence.append({"at": f"{int(at) // 60:02d}:{int(at) % 60:02d}", "quote": e.quote})
+    evidence = evidence[:3]
     if not evidence:
         print("Style du prospect : aucune citation retrouvée dans la transcription, profil écarté.")
         return None
@@ -81,5 +86,5 @@ def build_style(segments, roles_known: bool) -> dict | None:
         "dominant": result.dominant, "emoji": info["emoji"], "label": info["label"], "traits": info["traits"], "tips": info["tips"],
         "secondary_label": second["label"] if second and result.secondary != result.dominant else "",
         "confidence": result.confidence, "why": result.why,
-        "evidence": [{"at": f"{e.t_sec // 60:02d}:{e.t_sec % 60:02d}", "quote": e.quote} for e in evidence],
+        "evidence": evidence,
     }
