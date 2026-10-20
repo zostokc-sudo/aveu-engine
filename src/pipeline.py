@@ -10,7 +10,7 @@ from debrief import NotASalesCall, build_debrief
 from conversation import conversation_metrics, transcript_lines
 from delivery import delivery_metrics
 from image_env import analyze_image
-from style import build_style
+from style import build_style, style_text_available
 from diarize import diarize, filmed_speaker, label_segments
 from extract_audio import extract_audio, normalize_video, probe_duration
 from html_report import render_debrief_only, render_html, render_pdf
@@ -106,10 +106,11 @@ def run(video_path: Path, subject_name: str, context: str, source_url: str | Non
 
     extras = {"focus": list(focus), "benchmark": benchmark if benchmark and benchmark.get("opening") is not None else None}
     extras["delivery"] = delivery_metrics(segments) if roles_known else None
+    extras["style"] = None
     try:
-        if debrief is not None:
+        if debrief is not None and style_text_available(segments, roles_known):
             time.sleep(40)  # plafond gratuit Groq par minute : on laisse la fenêtre se vider après le débrief
-        extras["style"] = build_style(segments, roles_known) if debrief is not None else None
+            extras["style"] = build_style(segments, roles_known)
     except Exception as exc:  # le style du prospect est un plus : jamais bloquant
         print(f"Style du prospect indisponible : {exc!r}")
     if analyze_my_image and filmed_role == "closer" and visual_ok:

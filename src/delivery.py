@@ -8,7 +8,7 @@ Ne fonctionne que si les voix sont séparées (le closer = segments étiquetés 
 
 import re
 
-_FILLERS_FR = ["euh", "heu", "ben", "bah", "genre", "du coup", "en fait", "tu vois", "vous voyez", "quoi", "hein", "voilà", "enfin bref", "bref"]
+_FILLERS_FR = ["euh", "heu", "ben", "bah", "genre", "du coup", "en fait", "tu vois", "vous voyez", "quoi", "hein", "voilà", "enfin bref"]
 _FILLERS_EN = ["um", "uh", "you know", "like", "i mean", "kind of", "sort of"]
 _SOFT = [
     "petit", "petite", "petits", "petites", "juste", "un peu", "peut-être", "peut être", "je pense que", "je crois que",
@@ -20,10 +20,11 @@ _CHALLENGE = [
     "combien ça vous coûte", "combien ça te coûte", "qu'est-ce que vous avez déjà essayé", "qu'est-ce que tu as déjà essayé",
     "concrètement", "vraiment", "pourquoi maintenant", "dans 6 mois", "si rien ne change", "what happens if", "why haven't", "what's stopping",
 ]
-_QUESTION_START = ("comment ", "pourquoi ", "qu'est-ce", "est-ce que", "combien ", "quand ", "quel", "quelle", "où ", "what ", "how ", "why ", "when ", "do you", "are you", "is it")
+_QUESTION_START = ("comment ", "pourquoi ", "qu'est-ce", "est-ce que", "combien ", "quand ", "quel ", "quelle ", "quels ", "quelles ", "où ", "what ", "how ", "why ", "when ", "do you", "are you", "is it")
 
 
 def _count(text: str, phrases: list[str]) -> dict[str, int]:
+    text = text.replace("\u2019", "'")  # apostrophe typographique des transcriptions
     t = " " + re.sub(r"[^\w'àâçéèêëîïôûùüÿœ -]", " ", text.lower()) + " "
     found = {}
     for p in phrases:
@@ -34,7 +35,7 @@ def _count(text: str, phrases: list[str]) -> dict[str, int]:
 
 
 def _is_question(text: str) -> bool:
-    t = text.strip().lower()
+    t = text.strip().lower().replace("\u2019", "'")
     return t.endswith("?") or t.startswith(_QUESTION_START)
 
 

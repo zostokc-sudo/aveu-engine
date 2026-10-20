@@ -11,6 +11,7 @@ import sys
 import tempfile
 import time
 import traceback
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import requests
@@ -53,6 +54,14 @@ def part_paths(a: dict) -> list[str]:
     return [a["video_path"]] if n == 1 else [f"{a['video_path']}.p{i:02d}" for i in range(n)]
 
 
+def safe_patch(audit_id: str, **fields) -> None:
+    """Mise à jour qui ne doit jamais faire échouer le traitement des autres audits."""
+    try:
+        patch(audit_id, **fields)
+    except Exception as exc:
+        print("mise à jour impossible :", repr(exc), file=sys.stderr)
+
+
 class Tee(io.TextIOBase):
     """Copie tout ce que le pipeline affiche : garde un journal par audit et publie l'étape en cours (champ `progress`)."""
 
@@ -92,7 +101,15 @@ def process(a: dict) -> None:
     if not str(a.get("video_path", "")).startswith(f"{a['user_id']}/") or ".." in a["video_path"]:
         patch(audit_id, status="error", error="Chemin de vidéo invalide.")  # défense en plus de la règle de la base
         return
-    patch(audit_id, status="running", progress="Démarrage…")
+    claim = requests.patch(  # réservation atomique : un seul passage peut faire passer l'audit de « queued » à « running »
+        f"{URL}/rest/v1/audits", params={"id": f"eq.{audit_id}", "status": "eq.queued"},
+        headers={**H, "Content-Type": "application/json", "Prefer": "return=representation"},
+        json={"status": "running", "progress": "Démarrage…", "started_at": datetime.now(timezone.utc).isoformat()}, timeout=30,
+    )
+    claim.raise_for_status()
+    if not claim.json():
+        print("audit déjà pris par un autre passage :", audit_id)
+        return
     tee = Tee(audit_id, sys.stdout)
     tmp = Path(tempfile.mkdtemp())
     video = tmp / f"{audit_id}{Path(a['video_path']).suffix or '.mp4'}"
@@ -103,7 +120,7 @@ def process(a: dict) -> None:
                     r.raise_for_status()
                     for chunk in r.iter_content(1 << 20):
                         f.write(chunk)
-        with contextlib.redirect_stdout(tee):
+        with contextlib.redirect_stdout(tee), contextlib.redirect_stderr(tee):
           report = run(video, a["subject"], a["context"] or "appel de vente (interlocuteur externe)", a.get("source_url"),
                        filmed_role=a.get("filmed_role") or "prospect", focus=tuple(a.get("focus") or ()),
                        analyze_my_image=bool(a.get("analyze_image")), benchmark=fetch_benchmark())
@@ -119,24 +136,25 @@ def process(a: dict) -> None:
         up.raise_for_status()
         patch(audit_id, status="done", report_path=report_path, progress=None)
     except (MultipleFacesDetected, NoFaceDetected, NoUsableContent) as exc:
-        patch(audit_id, status="error", error=str(exc)[:300], progress=None)
-    except Exception as exc:  # message court côté client, détail dans les logs Actions
-        print("ERREUR", audit_id, repr(exc), file=sys.stderr)
-        traceback.print_exc()
-        patch(audit_id, status="error", error="L'analyse a échoué. Réessayez avec une autre vidéo.", progress=None)
+        safe_patch(audit_id, status="error", error=str(exc)[:300], progress=None)
+    except Exception as exc:  # message court côté client ; le détail va dans le journal de l'audit et dans les logs Actions
+        tee.write(f"ERREUR {audit_id} {exc!r}\n{traceback.format_exc()}\n")
+        safe_patch(audit_id, status="error", error="L'analyse a échoué. Réessayez avec une autre vidéo.", progress=None)
     finally:
-        save_log(audit_id, tee.text() + ("\n" + traceback.format_exc() if sys.exc_info()[0] else ""))
+        save_log(audit_id, tee.text())
         for part in part_paths(a):  # on ne garde pas la vidéo
-            requests.delete(f"{URL}/storage/v1/object/videos/{part}", headers=H, timeout=30)
+            try:
+                requests.delete(f"{URL}/storage/v1/object/videos/{part}", headers=H, timeout=30)
+            except requests.RequestException as exc:
+                print("suppression de la vidéo à refaire :", repr(exc), file=sys.stderr)
 
 
 def release_stuck() -> None:
     """Un audit bloqué en 'running' (job GitHub interrompu) repasse en erreur au bout de 90 min."""
-    from datetime import datetime, timedelta, timezone
     limit = (datetime.now(timezone.utc) - timedelta(minutes=90)).isoformat()
     r = requests.patch(
         f"{URL}/rest/v1/audits",
-        params={"status": "eq.running", "created_at": f"lt.{limit}"},  # params : le '+' du fuseau est encodé correctement
+        params={"status": "eq.running", "or": f"(started_at.lt.{limit},and(started_at.is.null,created_at.lt.{limit}))"},  # params : le '+' du fuseau est encodé correctement
         headers={**H, "Content-Type": "application/json"},
         json={"status": "error", "error": "L'analyse a été interrompue. Renvoyez votre vidéo."}, timeout=30,
     )
@@ -153,7 +171,10 @@ def main() -> None:
     for n, a in enumerate(r.json()):
         if n:
             time.sleep(60)  # plafond gratuit Groq par minute : on laisse la fenêtre se vider entre deux audits
-        process(a)
+        try:
+            process(a)
+        except Exception as exc:  # un audit en échec ne doit pas empêcher les suivants
+            print("échec inattendu sur", a.get("id"), repr(exc), file=sys.stderr)
 
 
 if __name__ == "__main__":

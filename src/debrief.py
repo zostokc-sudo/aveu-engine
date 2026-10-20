@@ -150,17 +150,35 @@ def chunk_lines(lines: list[tuple[float, str]], size: int = _CHUNK_CHARS) -> lis
     return chunks
 
 
+def _tokens(text: str) -> list[str]:
+    return re.findall(r"[\wàâçéèêëîïôûùüÿœ'-]+", text.lower().replace("\u2019", "'"))
+
+
 def _words(text: str) -> set[str]:
-    return {w for w in re.findall(r"[\wàâçéèêëîïôûùüÿœ'-]+", text.lower()) if len(w) > 2 and w not in _STOP}
+    return {w for w in _tokens(text) if len(w) > 2 and w not in _STOP}
 
 
-def quote_is_grounded(quote: str, t_sec: float, segments, window: float = 150.0, threshold: float = 0.7) -> bool:
-    """La citation (au moins 70 % de ses mots significatifs) se retrouve-t-elle dans le texte autour de t_sec ?"""
-    q = _words(quote)
-    if not q:
+def quote_is_grounded(quote: str, t_sec: float, segments, window: float = 150.0, threshold: float = 0.7, speaker: str | None = None) -> bool:
+    """La citation se retrouve-t-elle dans le texte autour de t_sec ?
+    Il faut (1) au moins 70 % de ses mots significatifs ET (2) au moins 40 % de ses enchaînements de deux mots consécutifs
+    (une paraphrase qui réutilise des mots épars est écartée). `speaker` limite la recherche aux phrases d'un rôle."""
+    q = _tokens(quote)
+    if len(q) < 2:
         return False
-    near = _words(" ".join(s.text for s in segments if abs(s.start - t_sec) <= window))
-    return len(q & near) / len(q) >= threshold
+    near_segs = [s for s in segments if abs(s.start - t_sec) <= window and (speaker is None or s.speaker == speaker)]
+    near = _tokens(" ".join(s.text for s in near_segs))
+    sig = {w for w in q if len(w) > 2 and w not in _STOP} or set(q)  # citation faite de mots courts : on compare tous les mots
+    near_set = set(near)
+    if len(sig & near_set) / len(sig) < threshold:
+        return False
+    big_q = list(zip(q, q[1:]))
+    big_n = set(zip(near, near[1:]))
+    return sum(b in big_n for b in big_q) / len(big_q) >= 0.4
+
+
+def _is_rate_limit(exc: Exception) -> bool:
+    msg = str(exc).lower()
+    return getattr(exc, "status_code", None) == 429 or "rate_limit" in msg or "rate limit" in msg or "request too large" in msg
 
 
 def _call(system: str, user: str, model_cls, max_tokens: int):
@@ -171,11 +189,10 @@ def _call(system: str, user: str, model_cls, max_tokens: int):
             return llm_parse(system=system, user=user, output_format=model_cls, max_tokens=max_tokens)
         except Exception as exc:
             last = exc
-            msg = str(exc)
-            if "rate" in msg.lower() or "429" in msg or "Request too large" in msg:
+            if _is_rate_limit(exc) and attempt < 4:
                 time.sleep(35)
                 continue
-            if attempt == 0:
+            if attempt == 0 and not _is_rate_limit(exc):
                 continue  # le modèle rate parfois son JSON : une relance suffit
             break
     raise last
@@ -238,22 +255,27 @@ def build_debrief(segments, roles_inferred: bool, progress=print, focus=()) -> d
     payload = to_payload(selected)
     out_tokens = 3000 if focus_keys else 2600
     debrief = None
-    for _ in range(5):  # le modèle peut rater son JSON ou dépasser le plafond gratuit : on ajuste puis on réessaie
+    for _ in range(5):  # le modèle peut rater son JSON, dépasser le plafond gratuit ou oublier une étape : on ajuste puis on réessaie
+        problem = None
         try:
             debrief = _call(_REDUCE_SYSTEM, focus_note + edges + "Notes de l'appel (JSON) :\n" + json.dumps(payload, ensure_ascii=False), CloserDebrief, out_tokens)
-            break
+            if len({d.key for d in debrief.scorecard}) == len(DIMENSIONS):
+                break
+            problem = "scorecard incomplet"
+            debrief = None
         except Exception as exc:
             msg = str(exc).lower()
-            if ("too large" in msg or "json_validate_failed" in msg or "max completion" in msg or "truncated" in msg) and limit > 10:
-                limit = int(limit * 0.75)
-                payload = to_payload(_select_notes(notes, limit))  # on retire les notes les moins décisives, pas la fin de l'appel
-                out_tokens = min(out_tokens + 600, 3600)
-                print(f"Débrief : requête ajustée ({len(payload)} notes, {out_tokens} tokens de sortie max)")
-                time.sleep(30)
-                continue
-            raise
+            if not ("too large" in msg or "json_validate_failed" in msg or "max completion" in msg or "truncated" in msg):
+                raise
+            problem = "réponse invalide ou trop grosse"
+        out_tokens = min(out_tokens + 600, 3600)
+        if limit > 10 and problem != "scorecard incomplet":
+            limit = int(limit * 0.75)
+            payload = to_payload(_select_notes(notes, limit))  # on retire les notes les moins décisives, pas la fin de l'appel
+        print(f"Débrief : {problem}, nouvel essai ({len(payload)} notes, {out_tokens} tokens de sortie max)")
+        time.sleep(30)
     if debrief is None:
-        raise RuntimeError("Le modèle n'a pas pu rédiger le débrief.")
+        raise RuntimeError("Le modèle n'a pas pu rédiger un débrief complet.")
     return _sanitize(debrief, segments, roles_inferred, focus_keys)
 
 
@@ -277,7 +299,7 @@ def _sanitize(d: CloserDebrief, segments, roles_inferred: bool, focus_keys=()) -
         "scorecard": scorecard,
         "strengths": [{"at": _mmss(x.t_sec), "quote": ok(x.quote, x.t_sec), "why": x.why} for x in d.strengths if ok(x.quote, x.t_sec)][:3],
         "missed": [{"at": _mmss(x.t_sec), "prospect_said": ok(x.prospect_said, x.t_sec), "closer_did": x.closer_did, "better_move": x.better_move}
-                   for x in d.missed][:4],
+                   for x in d.missed if ok(x.prospect_said, x.t_sec)][:4],  # sans citation vérifiée, pas d'occasion manquée affichée
         "priorities": d.priorities[:3],
         "next_step_secured": d.next_step_secured,
         "next_step_detail": d.next_step_detail,

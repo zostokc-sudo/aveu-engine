@@ -52,20 +52,26 @@ RÈGLES : tu décris des comportements de langage observés, jamais la personnal
 copiées MOT POUR MOT des lignes du prospect. Réponds en français."""
 
 
+def style_text_available(segments, roles_known: bool) -> bool:
+    return sum(len(s.text) for s in segments if s.text.strip() and (not roles_known or s.speaker == 'filmed')) >= 500
+
+
 def build_style(segments, roles_known: bool) -> dict | None:
     mine = [s for s in segments if s.text.strip() and (not roles_known or s.speaker == "filmed")]
     if sum(len(s.text) for s in mine) < 500:
         print("Style du prospect : texte du prospect insuffisant.")
         return None
-    step = max(1, len(mine) // 40)  # échantillon réparti sur tout l'appel
-    sample = mine[::step][:40]
+    if len(mine) > 40:  # échantillon réparti sur TOUT l'appel (et pas seulement son début)
+        sample = [mine[int(i * len(mine) / 40)] for i in range(40)]
+    else:
+        sample = mine
     lines = "\n".join(f"[{int(s.start) // 60:02d}:{int(s.start) % 60:02d}] {s.text.strip()}" for s in sample)[:6500]
     who = "Lignes du prospect" if roles_known else "Transcription (le prospect est celui qui répond aux questions et exprime un besoin)"
     result = _call(_SYSTEM, f"{who} :\n\n{lines}", StyleProfile, 900)
     if result.dominant == "indetermine":
         print("Style du prospect : le texte ne permet pas de trancher.")
         return None
-    evidence = [e for e in result.evidence if quote_is_grounded(e.quote, e.t_sec, segments)][:3]
+    evidence = [e for e in result.evidence if quote_is_grounded(e.quote, e.t_sec, segments, speaker='filmed' if roles_known else None)][:3]
     if not evidence:
         print("Style du prospect : aucune citation retrouvée dans la transcription, profil écarté.")
         return None
