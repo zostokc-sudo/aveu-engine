@@ -1,0 +1,22 @@
+name: Évaluer le débrief
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: audits   # même file que les audits : ils se partagent le plafond gratuit de Groq
+  cancel-in-progress: false
+
+jobs:
+  evaluer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -q openai python-dotenv pydantic
+      - name: Évaluer
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        run: python scripts/eval_debrief.py
