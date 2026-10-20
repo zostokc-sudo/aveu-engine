@@ -1,6 +1,7 @@
 """Orchestrateur : vidéo -> transcription + signaux comportementaux -> rapport HTML."""
 
 import argparse
+import json
 import time
 from pathlib import Path
 
@@ -40,7 +41,8 @@ def _no_face_note(reason: str) -> str:
 
 
 def run(video_path: Path, subject_name: str, context: str, source_url: str | None = None,
-        filmed_role: str = "prospect", focus: tuple | list = (), analyze_my_image: bool = False) -> Path:
+        filmed_role: str = "prospect", focus: tuple | list = (), analyze_my_image: bool = False,
+        benchmark: dict | None = None) -> Path:
     """filmed_role : 'prospect' (cas normal : jauges de réactions sur le prospect) ou 'closer' (auto-évaluation : pas
     d'analyse de réactions du visage, seulement le texte, la voix, le vocabulaire et, si demandé, l'image/le décor)."""
     stem = video_path.stem
@@ -102,7 +104,7 @@ def run(video_path: Path, subject_name: str, context: str, source_url: str | Non
             raise NoUsableContent(not_sales + " Envoyez l'enregistrement d'un appel entre un vendeur et un prospect.")
         raise NoUsableContent("Ni visage exploitable ni texte suffisant : impossible de produire un rapport (enregistrement trop court ou sans parole ?).")
 
-    extras = {"focus": list(focus)}
+    extras = {"focus": list(focus), "benchmark": benchmark if benchmark and benchmark.get("opening") is not None else None}
     extras["delivery"] = delivery_metrics(segments) if roles_known else None
     try:
         if debrief is not None:
@@ -117,6 +119,13 @@ def run(video_path: Path, subject_name: str, context: str, source_url: str | Non
             print(f"Image indisponible : {exc!r}")
 
     transcript, convo = transcript_lines(segments), conversation_metrics(segments)
+    if debrief is not None:  # statistiques anonymes (aucun texte) : elles servent de point de comparaison aux prochains débriefs
+        d = extras.get("delivery") or {}
+        (run_dir / "stats.json").write_text(json.dumps({
+            "scores": {c["key"]: c["score"] for c in debrief["scorecard"]},
+            "wpm": d.get("wpm"), "soft_per_10min": d.get("soft_per_10min"), "challenge_pct": d.get("challenge_pct"),
+            "closer_share": (convo or {}).get("other_share"), "next_step_secured": debrief["next_step_secured"],
+        }), encoding="utf-8")
     print("[7/7] Rendu du rapport…")
     if report is not None:
         html_path = render_html(

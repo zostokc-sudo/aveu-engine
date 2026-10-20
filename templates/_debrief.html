@@ -45,6 +45,7 @@
         </svg>
         <div><h3>{{ d.label }}</h3><span class="pill" style="background:{{ d.soft }};color:{{ d.color }}">{{ d.verdict_label }}</span></div>
       </div>
+      {% if extras and extras.benchmark and extras.benchmark.get(d.key) is not none %}<p style="margin:10px 0 0;font-size:13px;color:var(--muted)">Moyenne des {{ extras.benchmark.n }} appels analysés : {{ extras.benchmark[d.key]|int }}/100 · {{ 'au-dessus' if d.score > extras.benchmark[d.key] else 'en dessous' if d.score < extras.benchmark[d.key] else 'dans la moyenne' }}</p>{% endif %}
       <p class="db-verdict">{{ d.verdict }}</p>
       {% if d.quote %}<div class="db-quote">« {{ d.quote }} » <small>{{ d.at }}</small></div>{% endif %}
       <div class="db-say"><b>À dire plutôt, la prochaine fois</b>{{ d.improvement }}</div>

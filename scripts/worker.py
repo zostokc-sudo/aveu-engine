@@ -25,6 +25,26 @@ def patch(audit_id: str, **fields) -> None:
     r.raise_for_status()
 
 
+def fetch_benchmark() -> dict | None:
+    """Moyennes des appels déjà analysés (anonymes), disponibles à partir de 10 appels."""
+    try:
+        r = requests.post(f"{URL}/rest/v1/rpc/debrief_benchmark", headers={**H, "Content-Type": "application/json"}, json={}, timeout=30)
+        r.raise_for_status()
+        return r.json()
+    except Exception as exc:
+        print("benchmark indisponible :", repr(exc), file=sys.stderr)
+        return None
+
+
+def save_stats(audit_id: str, report_path: Path) -> None:
+    stats_file = Path(report_path).parent / "stats.json"
+    if not stats_file.exists():
+        return
+    import json
+    row = {"audit_id": audit_id, **json.loads(stats_file.read_text(encoding="utf-8"))}
+    requests.post(f"{URL}/rest/v1/debrief_stats", headers={**H, "Content-Type": "application/json", "Prefer": "resolution=merge-duplicates"}, json=row, timeout=30)
+
+
 def part_paths(a: dict) -> list[str]:
     n = int(a.get("parts") or 1)
     return [a["video_path"]] if n == 1 else [f"{a['video_path']}.p{i:02d}" for i in range(n)]
@@ -44,8 +64,12 @@ def process(a: dict) -> None:
                         f.write(chunk)
         report = run(video, a["subject"], a["context"] or "appel de vente (interlocuteur externe)", a.get("source_url"),
                      filmed_role=a.get("filmed_role") or "prospect", focus=tuple(a.get("focus") or ()),
-                     analyze_my_image=bool(a.get("analyze_image")))
+                     analyze_my_image=bool(a.get("analyze_image")), benchmark=fetch_benchmark())
         report_path = f"{a['user_id']}/{audit_id}.html"
+        try:
+            save_stats(audit_id, report)
+        except Exception as exc:  # les statistiques ne doivent jamais empêcher la livraison du rapport
+            print("stats non enregistrées :", repr(exc), file=sys.stderr)
         up = requests.post(
             f"{URL}/storage/v1/object/reports/{report_path}",
             headers={**H, "Content-Type": "text/html", "x-upsert": "true"}, data=Path(report).read_bytes(), timeout=120,
