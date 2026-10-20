@@ -365,7 +365,7 @@ def _sanitize(d: CloserDebrief, segments, roles_inferred: bool, focus_keys=()) -
         "scorecard": scorecard,
         "strengths": strengths[:3],
         "missed": missed[:4],
-        "priorities": d.priorities[:3],
+        "priorities": [re.sub(r"^\s*(?:\d+\s*[.)\-:]|[-•*])\s*", "", x).strip() for x in d.priorities[:3]],  # le gabarit numérote déjà
         "next_step_secured": d.next_step_secured,
         "next_step_detail": d.next_step_detail,
         "roles_inferred": roles_inferred,
