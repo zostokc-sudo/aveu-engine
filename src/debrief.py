@@ -79,7 +79,8 @@ class CloserDebrief(BaseModel):
 
 _MAP_SYSTEM = """\
 Tu relis une TRANCHE de la transcription d'un appel de vente, pour préparer le débrief du CLOSER (le vendeur).
-Chaque ligne : [mm:ss] Locuteur: texte. Si le locuteur n'est pas indiqué, déduis qui est le closer (celui qui mène l'appel, \
+Chaque ligne : [mm:ss] Locuteur: texte. Les étiquettes Closer/Prospect viennent d'une détection automatique qui peut se tromper (ou s'inverser) : si le CONTENU montre l'inverse \
+(celui qui pose les questions et présente l'offre est le closer), corrige-le dans le champ speaker. Si le locuteur n'est pas indiqué, déduis qui est le closer (celui qui mène l'appel, \
 pose les questions, présente l'offre) et qui est le prospect ; en cas de doute, mets "inconnu".
 
 Relève au plus 10 notes, les plus utiles pour juger le TRAVAIL DU CLOSER : ouverture, questions de découverte, besoins ou \
@@ -176,25 +177,43 @@ def quote_is_grounded(quote: str, t_sec: float, segments, window: float = 150.0,
     return sum(b in big_n for b in big_q) / len(big_q) >= 0.4
 
 
+_LABEL = re.compile(r"^\s*(?:\[\d{1,2}:\d{2}\]\s*)?(?:closer|prospect)\s*:\s*", re.I)
+
+
+def clean_quote(quote: str) -> str:
+    """Le modèle recopie parfois « [03:12] Prospect : » devant une citation : on enlève l'étiquette."""
+    return _LABEL.sub("", quote).strip()
+
+
 def locate_quote(quote: str, segments, speaker: str | None = None, threshold: float = 0.7) -> float | None:
     """Cherche la citation dans toute la transcription (le modèle se trompe souvent de seconde) et renvoie le début
     du passage où elle se trouve vraiment, ou None si elle n'existe pas. Mêmes exigences que quote_is_grounded."""
-    q = _tokens(quote)
+    q = _tokens(clean_quote(quote))
     if len(q) < 2:
         return None
     sig = {w for w in q if len(w) > 2 and w not in _STOP} or set(q)
     big_q = list(zip(q, q[1:]))
     cands = [s for s in segments if (speaker is None or s.speaker == speaker) and s.text.strip()]
+
+    def score(text: str) -> float:
+        near = _tokens(text)
+        if len(sig & set(near)) / len(sig) < threshold:
+            return 0.0
+        big_n = set(zip(near, near[1:]))
+        ratio = sum(b in big_n for b in big_q) / len(big_q)
+        return ratio if ratio >= 0.4 else 0.0
+
     best, best_score = None, 0.0
-    for i, seg in enumerate(cands):
-        for text, start in ((seg.text, seg.start), (seg.text + " " + cands[i + 1].text if i + 1 < len(cands) else seg.text, seg.start)):
-            near = _tokens(text)
-            if len(sig & set(near)) / len(sig) < threshold:
-                continue
-            big_n = set(zip(near, near[1:]))
-            ratio = sum(b in big_n for b in big_q) / len(big_q)
-            if ratio >= 0.4 and ratio > best_score:
-                best, best_score = start, ratio
+    for seg in cands:  # d'abord un passage seul (le plus précis)
+        r = score(seg.text)
+        if r > best_score:
+            best, best_score = seg.start, r
+    if best is not None:
+        return best
+    for seg, nxt in zip(cands, cands[1:]):  # sinon la citation chevauche deux passages consécutifs
+        r = score(seg.text + " " + nxt.text)
+        if r > best_score:
+            best, best_score = seg.start, r
     return best
 
 
@@ -243,6 +262,7 @@ def collect_notes(segments, progress=print) -> list[Note]:
         raise NotASalesCall("Cet enregistrement ne ressemble pas à un appel de vente (conférence, cours ou monologue).")
     kept = []
     for n in notes:
+        n.quote = clean_quote(n.quote)
         at = locate_quote(n.quote, segments)
         if at is not None:
             n.t_sec = int(at)  # la seconde réelle remplace celle (souvent approximative) du modèle
@@ -309,6 +329,7 @@ def build_debrief(segments, roles_inferred: bool, progress=print, focus=()) -> d
 
 def _sanitize(d: CloserDebrief, segments, roles_inferred: bool, focus_keys=()) -> dict:
     def ok(q: str, speaker: str | None = None) -> tuple[str, float | None]:
+        q = clean_quote(q) if q else q
         at = locate_quote(q, segments, speaker) if q else None
         return (q, at) if at is not None else ("", None)
 

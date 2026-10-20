@@ -107,3 +107,18 @@ def label_segments(segments, turns: list[Turn], filmed: int | None, filmed_role:
         prospect_side = is_screen_person if filmed_role == "prospect" else not is_screen_person
         seg.speaker = "filmed" if prospect_side else "other"
     return True
+
+
+def fix_swapped_roles(segments) -> bool:
+    """Garde-fou : un closer pose en général bien plus de questions que son prospect. Si les rôles étiquetés montrent
+    clairement l'inverse (au moins 6 questions et 2 fois plus côté « prospect »), on les inverse et on le dit.
+    Renvoie True si une inversion a eu lieu."""
+    def questions(tag):
+        return sum(1 for s in segments if s.speaker == tag and s.text.strip().endswith("?"))
+    closer_q, prospect_q = questions("other"), questions("filmed")
+    if prospect_q >= 6 and prospect_q >= 2 * max(closer_q, 1):
+        for s in segments:
+            if s.speaker in ("filmed", "other"):
+                s.speaker = "other" if s.speaker == "filmed" else "filmed"
+        return True
+    return False

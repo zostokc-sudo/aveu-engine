@@ -11,7 +11,7 @@ from conversation import conversation_metrics, transcript_lines
 from delivery import delivery_metrics
 from image_env import analyze_image
 from style import build_style, style_text_available
-from diarize import diarize, filmed_speaker, label_segments
+from diarize import diarize, filmed_speaker, fix_swapped_roles, label_segments
 from extract_audio import extract_audio, normalize_video, probe_duration
 from html_report import render_debrief_only, render_html, render_pdf
 from report_generator import compute_behavior_profile, generate_report, save_report_json
@@ -80,6 +80,8 @@ def run(video_path: Path, subject_name: str, context: str, source_url: str | Non
     turns = diarize(wav_path)
     roles_known = label_segments(segments, turns, filmed_speaker(turns, buckets) if visual_ok else None, filmed_role)
     print("Voix séparées : la personne filmée est identifiée." if roles_known else "Voix non étiquetées : les rôles seront déduits du texte.")
+    if roles_known and fix_swapped_roles(segments):
+        print("Rôles inversés automatiquement : le « prospect » posait la plupart des questions.")
 
     if visual_ok and filmed_role == "closer":
         visual_note = ("Vous êtes à l'écran : par principe, Aveu n'analyse pas vos expressions du visage. "
