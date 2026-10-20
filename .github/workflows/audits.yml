@@ -4,6 +4,9 @@ on:
     - cron: "*/5 * * * *"
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 concurrency:
   group: audits
   cancel-in-progress: false
@@ -14,6 +17,8 @@ jobs:
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
       # Si rien n'est en attente, on s'arrête en quelques secondes (pas de minutes gaspillées).
       - name: Audit en attente ?
@@ -55,3 +60,15 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: python scripts/worker.py
+
+      # Signe de vie mensuel : GitHub désactive les tâches planifiées d'un dépôt public sans activité depuis 60 jours.
+      - name: heartbeat
+        if: always()
+        run: |
+          last=$(git log -1 --format=%ct)
+          now=$(date +%s)
+          if [ $((now - last)) -gt 2592000 ]; then
+            date -u +"%Y-%m-%dT%H:%M:%SZ" > heartbeat.txt
+            git config user.name "aveu-bot"; git config user.email "bot@users.noreply.github.com"
+            git add heartbeat.txt && git commit -qm "heartbeat" && git push -q || true
+          fi
