@@ -231,16 +231,29 @@ def build_debrief(segments, roles_inferred: bool, progress=print, focus=()) -> d
         names = ", ".join(label for k, label in DIMENSIONS if k in focus_keys)
         focus_note = (f"FOCUS DEMANDÉ par le closer : {names}. Pour ces étapes uniquement, 'improvement' contient DEUX formulations "
                       "différentes séparées par « — ou — », et 'verdict' est plus précis (2 phrases). Les autres étapes restent brèves.\n\n")
-    payload = [{"t": _mmss(n.t_sec), "t_sec": n.t_sec, "qui": n.speaker, "type": n.kind, "citation": n.quote, "note": n.comment} for n in selected]
-    for _ in range(4):  # si la requête dépasse le plafond, on garde moins de notes
+    def to_payload(sel):
+        return [{"t": _mmss(n.t_sec), "t_sec": n.t_sec, "qui": n.speaker, "type": n.kind, "citation": n.quote, "note": n.comment} for n in sel]
+
+    limit = len(selected)
+    payload = to_payload(selected)
+    out_tokens = 3000 if focus_keys else 2600
+    debrief = None
+    for _ in range(5):  # le modèle peut rater son JSON ou dépasser le plafond gratuit : on ajuste puis on réessaie
         try:
-            debrief = _call(_REDUCE_SYSTEM, focus_note + edges + "Notes de l'appel (JSON) :\n" + json.dumps(payload, ensure_ascii=False), CloserDebrief, 2600)
+            debrief = _call(_REDUCE_SYSTEM, focus_note + edges + "Notes de l'appel (JSON) :\n" + json.dumps(payload, ensure_ascii=False), CloserDebrief, out_tokens)
             break
         except Exception as exc:
-            if "too large" in str(exc).lower() and len(payload) > 12:
-                payload = payload[: int(len(payload) * 0.7)]
+            msg = str(exc).lower()
+            if ("too large" in msg or "json_validate_failed" in msg or "max completion" in msg or "truncated" in msg) and limit > 10:
+                limit = int(limit * 0.75)
+                payload = to_payload(_select_notes(notes, limit))  # on retire les notes les moins décisives, pas la fin de l'appel
+                out_tokens = min(out_tokens + 600, 3600)
+                print(f"Débrief : requête ajustée ({len(payload)} notes, {out_tokens} tokens de sortie max)")
+                time.sleep(30)
                 continue
             raise
+    if debrief is None:
+        raise RuntimeError("Le modèle n'a pas pu rédiger le débrief.")
     return _sanitize(debrief, segments, roles_inferred, focus_keys)
 
 
