@@ -12,6 +12,16 @@ from pydantic import BaseModel, Field
 from debrief import _call, locate_quote
 
 _Color = Literal["rouge", "jaune", "vert", "bleu", "indetermine"]
+_Trait = Literal["reserve", "presse", "mefiant", "indecis", "enthousiaste", "dominant", "perfectionniste",
+                 "peu_confiant", "approbation", "prudent", "impulsif", "evasif"]
+
+PROFILE_URL = "https://aveu.surge.sh/profils.html"
+TRAITS = {  # libellés des fiches du site (landing/profils-data.js)
+    "reserve": ("🤫", "Réservé"), "presse": ("⏱️", "Pressé"), "mefiant": ("🕵️", "Méfiant"), "indecis": ("⚖️", "Indécis"),
+    "enthousiaste": ("🤩", "Enthousiaste"), "dominant": ("🦁", "Dominant"), "perfectionniste": ("🔬", "Perfectionniste"),
+    "peu_confiant": ("🌱", "Peu confiant"), "approbation": ("👥", "Avis des autres"), "prudent": ("🛡️", "Prudent"),
+    "impulsif": ("⚡", "Impulsif"), "evasif": ("🌫️", "Évasif"),
+}
 
 
 class StyleEvidence(BaseModel):
@@ -23,6 +33,7 @@ class StyleProfile(BaseModel):
     dominant: _Color = Field(description="couleur dominante dans cet échange, ou 'indetermine' si le texte ne permet pas de trancher")
     secondary: _Color = Field(description="seconde couleur, ou 'indetermine'")
     confidence: Literal["faible", "moyenne"] = Field(description="jamais plus que 'moyenne' : un seul échange ne suffit pas")
+    traits: list[_Trait] = Field(default_factory=list, description="0 à 3 traits de langage visibles dans les citations (sinon liste vide)")
     evidence: list[StyleEvidence] = Field(description="1 à 3 citations qui justifient le choix")
     why: str = Field(description="deux phrases maximum : quels comportements de langage observés, sans jugement de personnalité")
 
@@ -81,10 +92,13 @@ def build_style(segments, roles_known: bool) -> dict | None:
         print("Style du prospect : aucune citation retrouvée dans la transcription, profil écarté.")
         return None
     info = STYLES[result.dominant]
+    traits = [{"key": t, "emoji": TRAITS[t][0], "label": TRAITS[t][1], "url": f"{PROFILE_URL}#trait-{t}"} for t in dict.fromkeys(result.traits)][:3]
     second = STYLES.get(result.secondary)
     return {
         "dominant": result.dominant, "emoji": info["emoji"], "label": info["label"], "traits": info["traits"], "tips": info["tips"],
         "secondary_label": second["label"] if second and result.secondary != result.dominant else "",
+        "url": f"{PROFILE_URL}#{result.dominant}", "traits": traits,
+        "secondary_url": f"{PROFILE_URL}#{result.secondary}" if second and result.secondary != result.dominant else "",
         "confidence": result.confidence, "why": result.why,
         "evidence": evidence,
     }
