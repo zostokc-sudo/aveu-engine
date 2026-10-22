@@ -136,6 +136,13 @@ def process(a: dict) -> None:
             headers={**H, "Content-Type": "text/html", "x-upsert": "true"}, data=Path(report).read_bytes(), timeout=120,
         )
         up.raise_for_status()
+        coaching = Path(report).parent / "coaching.json"
+        if coaching.exists():  # fiche pour « Mes coachings » ; son absence ne doit jamais bloquer la livraison du rapport
+            try:
+                requests.post(f"{URL}/storage/v1/object/reports/{a['user_id']}/{audit_id}.json",
+                              headers={**H, "Content-Type": "application/json", "x-upsert": "true"}, data=coaching.read_bytes(), timeout=60).raise_for_status()
+            except requests.RequestException as exc:
+                print("fiche coaching non envoyée :", repr(exc), file=sys.stderr)
         patch(audit_id, status="done", report_path=report_path, progress=None)
     except DailyLimitReached:
         # capacité gratuite du jour épuisée : l'audit reste en file et sera repris plus tard (pas d'erreur côté client)

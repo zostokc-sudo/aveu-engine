@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 
 from audio_analysis import analyze_audio
+from coaching import build_coaching
 from debrief import NotASalesCall, build_debrief
 from groq_llm import DailyLimitReached
 from conversation import conversation_metrics, transcript_lines
@@ -14,7 +15,7 @@ from image_env import analyze_image
 from style import build_style, style_text_available
 from diarize import diarize, filmed_speaker, fix_swapped_roles, label_segments
 from extract_audio import extract_audio, normalize_video, probe_duration
-from html_report import render_debrief_only, render_html, render_pdf
+from html_report import render_debrief_only, render_html, render_pdf, safe_url
 from report_generator import compute_behavior_profile, generate_report, save_report_json
 from transcribe import transcribe
 from visual_analysis import analyze_video, bucketize, check_multi_face_warning, probe_face_coverage
@@ -132,6 +133,12 @@ def run(video_path: Path, subject_name: str, context: str, source_url: str | Non
             "wpm": d.get("wpm"), "soft_per_10min": d.get("soft_per_10min"), "challenge_pct": d.get("challenge_pct"),
             "closer_share": (convo or {}).get("other_share"), "next_step_secured": debrief["next_step_secured"],
         }), encoding="utf-8")
+    if debrief is not None:  # fiche compacte pour « Mes coachings » (même contenu que le débrief, rien de plus)
+        try:
+            (run_dir / "coaching.json").write_text(json.dumps(
+                build_coaching(debrief, extras, subject_name, duration / 60, safe_url(source_url)), ensure_ascii=False), encoding="utf-8")
+        except Exception as exc:
+            print(f"Fiche coaching non créée : {exc!r}")
     print("[7/7] Rendu du rapport…")
     if report is not None:
         html_path = render_html(
